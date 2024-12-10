@@ -175,6 +175,7 @@
 
                         XCTAssertNotNil(filter2);
                         XCTAssertEqualObjects(filter, filter2);
+                        XCTAssertEqualObjects(fileStore.allFilterIds, @[syncFilterId]);
 
                         [expectation fulfill];
 
@@ -216,8 +217,8 @@
 
         [mxSession startWithSyncFilter:badFilter onServerSyncDone:^{
 
-            XCTAssertNil(mxSession.syncFilterId);
-
+            // https://github.com/matrix-org/synapse/pull/14369
+            XCTAssertTrue([mxSession.syncFilterId isEqualToString:@"0"]);
             [expectation fulfill];
 
         } failure:^(NSError *error) {

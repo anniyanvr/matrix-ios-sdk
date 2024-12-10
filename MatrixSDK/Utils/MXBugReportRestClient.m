@@ -21,6 +21,7 @@
 
 #import <AFNetworking/AFNetworking.h>
 #import <GZIP/GZIP.h>
+#import "MatrixSDKSwiftHeader.h"
 
 #if TARGET_OS_IPHONE
 #import <UIKit/UIKit.h>
@@ -30,12 +31,13 @@
 #endif
 
 #ifdef MX_CRYPTO
-#import <OLMKit/OLMKit.h>
 #endif
 
 #if __has_include(<MatrixKit/MatrixKit.h>)
 #import <MatrixKit/MatrixKit.h>
 #endif
+
+#warning File has not been annotated with nullability, see MX_ASSUME_MISSING_NULLABILITY_BEGIN
 
 @interface MXBugReportRestClient ()
 {
@@ -59,7 +61,7 @@
 
 @implementation MXBugReportRestClient
 
-- (instancetype)initWithBugReportEndpoint:(NSString *)theBugReportEndpoint
+- (nonnull instancetype)initWithBugReportEndpoint:(NSString *)theBugReportEndpoint
 {
     self = [super init];
     if (self)
@@ -98,7 +100,7 @@
     return self;
 }
 
-- (void)sendBugReport:(NSString *)text sendLogs:(BOOL)sendLogs sendCrashLog:(BOOL)sendCrashLog sendFiles:(NSArray<NSURL*>*)files attachGitHubLabels:(NSArray<NSString*>*)gitHubLabels progress:(void (^)(MXBugReportState, NSProgress *))progress success:(void (^)(void))success failure:(void (^)(NSError *))failure
+- (void)sendBugReport:(NSString *)text sendLogs:(BOOL)sendLogs sendCrashLog:(BOOL)sendCrashLog sendFiles:(NSArray<NSURL*>*)files attachGitHubLabels:(NSArray<NSString*>*)gitHubLabels progress:(void (^)(MXBugReportState, NSProgress *))progress success:(void (^)(NSString*))success failure:(void (^)(NSError *))failure
 {
     if (_state != MXBugReportStateReady)
     {
@@ -124,7 +126,7 @@
     }
 }
 
--(void)sendBugReport:(NSString *)text sendFiles:(NSArray<NSURL*>*)files attachGitHubLabels:(NSArray<NSString*>*)gitHubLabels progress:(void (^)(MXBugReportState, NSProgress *))progress success:(void (^)(void))success failure:(void (^)(NSError *))failure
+-(void)sendBugReport:(NSString *)text sendFiles:(NSArray<NSURL*>*)files attachGitHubLabels:(NSArray<NSString*>*)gitHubLabels progress:(void (^)(MXBugReportState, NSProgress *))progress success:(void (^)(NSString*))success failure:(void (^)(NSError *))failure
 {
     // The bugreport api needs at least app and version to render well
     NSParameterAssert(_appName && _version);
@@ -198,16 +200,6 @@
             [formData appendPartWithFormData:[self.build dataUsingEncoding:NSUTF8StringEncoding] name:@"build"];
         }
 
-#if __has_include(<MatrixKit/MatrixKit.h>)
-        [formData appendPartWithFormData:[MatrixKitVersion dataUsingEncoding:NSUTF8StringEncoding] name:@"matrix_kit_version"];
-#endif
-
-        [formData appendPartWithFormData:[MatrixSDKVersion dataUsingEncoding:NSUTF8StringEncoding] name:@"matrix_sdk_version"];
-
-#ifdef MX_CRYPTO
-        [formData appendPartWithFormData:[[OLMKit versionString] dataUsingEncoding:NSUTF8StringEncoding] name:@"olm_kit_version"];
-#endif
-
         if (self.deviceModel)
         {
             [formData appendPartWithFormData:[self.deviceModel dataUsingEncoding:NSUTF8StringEncoding] name:@"device"];
@@ -276,10 +268,15 @@
                                               else
                                               {
                                                   MXLogDebug(@"[MXBugReport] sendBugReport: report done in %.3fms", [[NSDate date] timeIntervalSinceDate:startDate] * 1000);
-
+                                                  
+                                                  NSString *reportUrl = nil;
+                                                  if ([response isKindOfClass:[NSDictionary class]]) {
+                                                      NSDictionary *responseDictionary = (NSDictionary*)responseObject;
+                                                      reportUrl = responseDictionary[@"report_url"];
+                                                  }
                                                   if (success)
                                                   {
-                                                      success();
+                                                      success(reportUrl);
                                                   }
                                               }
                                           }];
@@ -316,9 +313,12 @@
     if (logFiles.count)
     {
         _state = MXBugReportStateProgressZipping;
-
+        
         NSProgress *zipProgress = [NSProgress progressWithTotalUnitCount:logFiles.count];
-        progress(_state, zipProgress);
+        if (progress)
+        {
+            progress(_state, zipProgress);
+        }
 
         MXWeakify(self);
         dispatch_async(dispatchQueue, ^{

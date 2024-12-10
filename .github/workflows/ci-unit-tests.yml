@@ -12,7 +12,13 @@ on:
 jobs:
   unit-tests:
     name: Unit Tests
-    runs-on: macos-latest
+    runs-on: macos-13
+
+    concurrency:
+      # When running on develop, use the sha to allow all runs of this workflow to run concurrently.
+      # Otherwise only allow a single run of this workflow on each branch, automatically cancelling older runs.
+      group: ${{ github.ref == 'refs/heads/develop' && format('tests-develop-{0}', github.sha) || format('tests-{0}', github.ref) }}
+      cancel-in-progress: true
 
     steps:
       - uses: actions/checkout@v2
@@ -44,15 +50,20 @@ jobs:
         run: bundle exec fastlane test testplan:UnitTests
 
       # Store artifacts
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: report.html
           path: build/test/report.html
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: report.junit
           path: build/test/report.junit
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: MatrixSDK-macOS.xcresult
           path: build/test/MatrixSDK-macOS.xcresult/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

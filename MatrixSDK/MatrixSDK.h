@@ -26,6 +26,7 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 #import "MXRestClient.h"
 #import "MXSession.h"
 #import "MXError.h"
+#import "MXWarnings.h"
 
 #import "MXStore.h"
 #import "MXNoStore.h"
@@ -46,6 +47,10 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 #import "MXTools.h"
 #import "MXThrottler.h"
 #import "NSData+MatrixSDK.h"
+#import "MXMatrixVersions.h"
+#import "MXCapabilities.h"
+#import "MXRoomVersionsCapability.h"
+#import "MXBooleanCapability.h"
 
 #import "MXSDKOptions.h"
 
@@ -68,6 +73,9 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 #import "MXKeyVerificationRequestByDMJSONModel.h"
 #import "MXSASKeyVerificationStart.h"
 #import "MXQRCodeKeyVerificationStart.h"
+#import "MXCurve25519BackupAuthData.h"
+#import "MXAes256BackupAuthData.h"
+#import "MXKeyBackupPassword.h"
 
 #import "MXAes.h"
 
@@ -83,6 +91,8 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 
 #import "MXCallKitAdapter.h"
 #import "MXCallKitConfiguration.h"
+#import "MXCallAudioSessionConfigurator.h"
+#import "MXCallStackCall.h"
 
 #import "MXGroup.h"
 
@@ -96,7 +106,10 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 #import "MXEventAnnotationChunk.h"
 #import "MXEventAnnotation.h"
 #import "MXEventReferenceChunk.h"
-
+#import "MXEventReplace.h"
+#import "MXInReplyTo.h"
+#import "MXEventRelationThread.h"
+#import "MXEventContentLocation.h"
 
 #import "MXReplyEventParser.h"
 
@@ -138,21 +151,25 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 #import "MXPushGatewayRestClient.h"
 #import "MXEncryptedAttachments.h"
 #import "MXLoginSSOIdentityProviderBrand.h"
+#import "MXDecryptionResult.h"
 
 //  Bridging to Swift
-#import "MXCryptoStore.h"
-#import "MXRealmCryptoStore.h"
-#import "MXCryptoAlgorithms.h"
-#import "MXOlmDevice.h"
+#import "MXCryptoConstants.h"
 #import "MXEventDecryptionResult.h"
 #import "MXPushRuleEventMatchConditionChecker.h"
 #import "MXPushRuleDisplayNameCondtionChecker.h"
 #import "MXPushRuleRoomMemberCountConditionChecker.h"
 #import "MXPushRuleSenderNotificationPermissionConditionChecker.h"
-#import "MXMegolmDecryption.h"
-#import "MXOlmDecryption.h"
 #import "MXCachedSyncResponse.h"
-#import "MXBackgroundCryptoStore.h"
+#import "MXSharedHistoryKeyService.h"
+#import "MXRoomKeyEventContent.h"
+#import "MXForwardedRoomKeyEventContent.h"
+#import "MXKeyBackupEngine.h"
+#import "MXCryptoTools.h"
+#import "MXRecoveryKey.h"
+#import "MXSecretShareSend.h"
+#import "MXCryptoSecretStore.h"
+#import "MXCryptoVersion.h"
 
 //  Sync response models
 #import "MXSyncResponse.h"
@@ -172,4 +189,8 @@ FOUNDATION_EXPORT NSString *MatrixSDKVersion;
 #import "MXGroupsSyncResponse.h"
 #import "MXInvitedGroupSync.h"
 #import "MXGroupSyncProfile.h"
-#import "MXDehydrationService.h"
+#import "MXBeaconInfo.h"
+#import "MXBeacon.h"
+#import "MXEventAssetType.h"
+#import "MXDevice.h"
+

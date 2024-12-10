@@ -48,6 +48,8 @@
 - (void)tearDown
 {
     matrixSDKTestsData = nil;
+    
+    [super tearDown];
 }
 
 // Create a room with an event with a reaction on it
@@ -56,7 +58,7 @@
     [matrixSDKTestsData doTestWithAliceAndBobInARoom:self aliceStore:[[MXMemoryStore alloc] init] bobStore:[[MXMemoryStore alloc] init] readyToTest:^(MXSession *mxSession, MXSession *otherSession, NSString *roomId, XCTestExpectation *expectation) {
 
         MXRoom *room = [mxSession roomWithRoomId:roomId];
-        [room sendTextMessage:@"Hello" success:^(NSString *eventId) {
+        [room sendTextMessage:@"Hello" threadId:nil success:^(NSString *eventId) {
 
             [mxSession.aggregations addReaction:@"👍" forEvent:eventId inRoom:room.roomId success:^() {
 
@@ -152,7 +154,7 @@
     [matrixSDKTestsData doMXSessionTestWithBobAndARoom:self andStore:[[MXMemoryStore alloc] init] readyToTest:^(MXSession *mxSession, MXRoom *room, XCTestExpectation *expectation) {
 
         // - Send a message
-        [room sendTextMessage:@"Hello" success:^(NSString *eventId) {
+        [room sendTextMessage:@"Hello" threadId:nil success:^(NSString *eventId) {
 
             // - React on it
             [mxSession.aggregations addReaction:@"👍" forEvent:eventId inRoom:room.roomId success:^() {
@@ -482,7 +484,7 @@
     [matrixSDKTestsData doMXSessionTestWithBobAndARoom:self andStore:[[MXMemoryStore alloc] init] readyToTest:^(MXSession *mxSession, MXRoom *room, XCTestExpectation *expectation) {
 
         // - Send a message
-        [room sendTextMessage:@"Hello" success:^(NSString *eventId) {
+        [room sendTextMessage:@"Hello" threadId:nil success:^(NSString *eventId) {
 
             // - React on it
             [mxSession.aggregations addReaction:@"👍" forEvent:eventId inRoom:room.roomId success:^() {
@@ -649,12 +651,12 @@
         XCTAssertEqual(reactionCount.count, 1);
         if ([reactionCount.reaction isEqualToString: @"👍"])
         {
-            #warning Not implemented yet - https://github.com/vector-im/riot-ios/issues/2452
+            // TODO: Not implemented yet - https://github.com/vector-im/riot-ios/issues/2452
             // XCTAssertTrue(reactionCount.myUserHasReacted, @"We must know reaction made by our user");
         }
         else if ([reactionCount.reaction isEqualToString: @"🙂"])
         {
-            #warning Not implemented yet - https://github.com/vector-im/riot-ios/issues/2452
+            // TODO: Not implemented yet - https://github.com/vector-im/riot-ios/issues/2452
             // XCTAssertFalse(reactionCount.myUserHasReacted);
         }
         else
@@ -668,7 +670,7 @@
 // Check we get valid reaction (from the HS) when paginating
 - (void)checkReactionsWhenPaginating:(MXSession*)mxSession room:(MXRoom*)room event:(NSString*)eventId expectation:(XCTestExpectation*)expectation
 {
-    [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+    [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
         [liveTimeline resetPagination];
         [liveTimeline paginate:100 direction:MXTimelineDirectionBackwards onlyFromStore:NO complete:^{
 
@@ -713,7 +715,7 @@
 // Check we get valid reaction (from the HS) when paginating
 - (void)checkReactionsOnPermalink:(MXSession*)mxSession room:(MXRoom*)room event:(NSString*)eventId expectation:(XCTestExpectation*)expectation
 {
-    MXEventTimeline *timeline = [room timelineOnEvent:eventId];
+    id<MXEventTimeline> timeline = [room timelineOnEvent:eventId];
     [timeline resetPaginationAroundInitialEventWithLimit:0 success:^{
 
         // Random usage to keep a strong reference on timeline

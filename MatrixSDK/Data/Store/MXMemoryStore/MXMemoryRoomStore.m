@@ -20,7 +20,7 @@
 #import "MXEventsEnumeratorOnArray.h"
 #import "MXEventsByTypesEnumeratorOnArray.h"
 
-@interface MXMemoryRoomStore ()
+@interface MXMemoryRoomStore () <MXEventsEnumeratorDataSource>
 {
 }
 
@@ -85,22 +85,69 @@
     [messagesByEventIds removeAllObjects];
 }
 
+- (NSArray <NSString *>*)allEventIds
+{
+    NSMutableArray *eventIds = [[NSMutableArray alloc] initWithCapacity:messages.count];
+    for (MXEvent *event in messages) {
+        [eventIds addObject:event.eventId];
+    }
+    return eventIds.copy;
+}
+
 - (id<MXEventsEnumerator>)messagesEnumerator
 {
-    return [[MXEventsEnumeratorOnArray alloc] initWithMessages:messages];
+    return [[MXEventsEnumeratorOnArray alloc] initWithEventIds:[self allEventIds] dataSource:self];
 }
 
 - (id<MXEventsEnumerator>)enumeratorForMessagesWithTypeIn:(NSArray*)types
 {
-    return [[MXEventsByTypesEnumeratorOnArray alloc] initWithMessages:messages andTypesIn:types];
+    return [[MXEventsByTypesEnumeratorOnArray alloc] initWithEventIds:[self allEventIds] andTypesIn:types dataSource:self];
 }
 
-- (NSArray*)eventsAfter:(NSString *)eventId except:(NSString*)userId withTypeIn:(NSSet*)types
+- (NSArray<MXEvent*>*)eventsInThreadWithThreadId:(NSString *)threadId except:(NSString *)userId withTypeIn:(NSSet<MXEventTypeString>*)types
+{
+    NSMutableArray* list = [[NSMutableArray alloc] init];
+    
+    if (threadId == nil || [threadId isEqualToString:kMXEventTimelineMain])
+    {
+        MXLogWarning(@"[MXMemoryRoomStore] eventsInThreadWithThreadId: invalid thread ID %@", threadId);
+        return list;
+    }
+
+    // Check messages from the most recent
+    for (NSInteger i = messages.count - 1; i >= 0 ; i--)
+    {
+        MXEvent *event = messages[i];
+
+        // Check if the event is the root event of the thread
+        if (NO == [event.eventId isEqualToString:threadId])
+        {
+            // Keep events matching filters
+            BOOL typeAllowed = !types || [types containsObject:event.type];
+            BOOL threadAllowed = [event.threadId isEqualToString:threadId];
+            BOOL senderAllowed = ![event.sender isEqualToString:userId];
+            if (typeAllowed && threadAllowed && senderAllowed)
+            {
+                [list insertObject:event atIndex:0];
+            }
+        }
+        else
+        {
+            // We are done
+            break;
+        }
+    }
+
+    return list;
+}
+
+- (NSArray<MXEvent*>*)eventsAfter:(NSString *)eventId threadId:(NSString *)threadId except:(NSString *)userId withTypeIn:(NSSet<MXEventTypeString>*)types
 {
     NSMutableArray* list = [[NSMutableArray alloc] init];
 
     if (eventId)
     {
+        NSString *_threadId = ![threadId isEqualToString:kMXEventTimelineMain] ? threadId : nil;
         // Check messages from the most recent
         for (NSInteger i = messages.count - 1; i >= 0 ; i--)
         {
@@ -109,7 +156,10 @@
             if (NO == [event.eventId isEqualToString:eventId])
             {
                 // Keep events matching filters
-                if ((!types || [types containsObject:event.type]) && ![event.sender isEqualToString:userId])
+                BOOL typeAllowed = !types || [types containsObject:event.type];
+                BOOL threadAllowed = (!_threadId && !event.isInThread) || [event.threadId isEqualToString:_threadId];
+                BOOL senderAllowed = ![event.sender isEqualToString:userId];
+                if (typeAllowed && threadAllowed && senderAllowed)
                 {
                     [list insertObject:event atIndex:0];
                 }
@@ -145,6 +195,33 @@
 - (NSString *)description
 {
     return [NSString stringWithFormat:@"%tu messages - paginationToken: %@ - hasReachedHomeServerPaginationEnd: %@ - hasLoadedAllRoomMembersForRoom: %@", messages.count, _paginationToken, @(_hasReachedHomeServerPaginationEnd), @(_hasLoadedAllRoomMembersForRoom)];
+}
+
+- (BOOL)removeAllMessagesSentBefore:(uint64_t)limitTs
+{
+    NSUInteger index = 0;
+    BOOL didChange = NO;
+    while (index < messages.count)
+    {
+        MXEvent *anEvent = [messages objectAtIndex:index];
+        if (anEvent.isState)
+        {
+            // Keep state event
+            index ++;
+        }
+        else if (anEvent.originServerTs < limitTs)
+        {
+            [messages removeObjectAtIndex:index];
+            [messagesByEventIds removeObjectForKey:anEvent.eventId];
+            didChange = YES;
+        }
+        else
+        {
+            // Break the loop, we've reached the first non-state event in the timeline which is not expired
+            break;
+        }
+    }
+    return didChange;
 }
 
 @end

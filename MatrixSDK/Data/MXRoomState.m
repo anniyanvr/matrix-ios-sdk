@@ -77,7 +77,9 @@
         
         stateEvents = [NSMutableDictionary dictionary];
         _members = [[MXRoomMembers alloc] initWithRoomState:self andMatrixSession:mxSession];
-        _membersCount = [MXRoomMembersCount new];
+        _membersCount = [[MXRoomMembersCount alloc] initWithMembers:_members.members.count
+                                                             joined:_members.joinedMembers.count
+                                                            invited:[_members membersWithMembership:MXMembershipInvite].count];
         roomAliases = [NSMutableDictionary dictionary];
         thirdPartyInvites = [NSMutableDictionary dictionary];
         membersWithThirdPartyInviteTokenCache = [NSMutableDictionary dictionary];
@@ -110,13 +112,46 @@
                matrixSession:(MXSession *)matrixSession
                   onComplete:(void (^)(MXRoomState *roomState))onComplete
 {
+    NSString *logId = [NSUUID UUID].UUIDString;
+    MXLogDebug(@"[MXRoomState] loadRoomStateFromStore(%@): Loading state for room %@", logId, roomId)
+    
     MXRoomState *roomState = [[MXRoomState alloc] initWithRoomId:roomId andMatrixSession:matrixSession andDirection:YES];
     if (roomState)
     {
         [store stateOfRoom:roomId success:^(NSArray<MXEvent *> * _Nonnull stateEvents) {
-            [roomState handleStateEvents:stateEvents];
+            if (!stateEvents.count) {
+                MXLogWarning(@"[MXRoomState] loadRoomStateFromStore(%@): No state events stored, loading from API", logId);
+                
+                if (!matrixSession)
+                {
+                    MXLogError(@"[MXRoomState] loadRoomStateFromStore: Missing session, unable to load from API")
+                    onComplete(roomState);
+                }
+                else
+                {
+                    [matrixSession.matrixRestClient stateOfRoom:roomId success:^(NSArray *JSONData) {
+                        NSArray<MXEvent *> *events = [MXEvent modelsFromJSON:JSONData];
+                        MXLogDebug(@"[MXRoomState] loadRoomStateFromStore(%@): Loaded %lu events from api", logId, events.count);
+                        
+                        [roomState handleStateEvents:events];
+                        onComplete(roomState);
+                    } failure:^(NSError *error) {
+                        NSDictionary *details = @{
+                            @"log_id": logId ?: @"unknown",
+                            @"error": error ?: @"unknown"
+                        };
+                        MXLogErrorDetails(@"[MXRoomState] loadRoomStateFromStore: Failed to load any events from API", details);
+                        
+                        onComplete(roomState);
+                    }];
+                }
+            } else {
+                MXLogDebug(@"[MXRoomState] loadRoomStateFromStore(%@): Initializing with %lu state events", logId, stateEvents.count);
+                
+                [roomState handleStateEvents:stateEvents];
+                onComplete(roomState);
+            }
 
-            onComplete(roomState);
         } failure:nil];
     }
 }
@@ -127,6 +162,7 @@
     if (self)
     {
         _isLive = NO;
+        _members = [[MXRoomMembers alloc] initWithMembers:_members isLive:NO];
 
         // At the beginning of pagination, the back room state must be the same
         // as the current current room state.
@@ -358,7 +394,7 @@
 
 - (BOOL)isEncrypted
 {
-    return (0 != self.encryptionAlgorithm.length);
+    return stateEvents[kMXEventTypeStringRoomEncryption] != nil;
 }
 
 - (NSArray<NSString *> *)pinnedEvents
@@ -395,6 +431,25 @@
     }
     
     return roomTombStoneContent;
+}
+
+- (NSArray<MXBeaconInfo*>*)beaconInfos
+{
+    NSMutableArray *beaconInfoEvents = [NSMutableArray new];
+    
+    NSArray *stateEvents = [self stateEventsWithType:kMXEventTypeStringBeaconInfoMSC3672];
+    
+    for (MXEvent *event in stateEvents)
+    {
+        MXBeaconInfo *beaconInfo = [[MXBeaconInfo alloc] initWithMXEvent:event];
+        
+        if (beaconInfo)
+        {
+            [beaconInfoEvents addObject:beaconInfo];
+        }
+    }
+    
+    return beaconInfoEvents;
 }
 
 #pragma mark - State events handling

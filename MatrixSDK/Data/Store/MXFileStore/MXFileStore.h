@@ -28,20 +28,17 @@ NS_ASSUME_NONNULL_BEGIN
  */
 typedef NS_OPTIONS(NSInteger, MXFileStorePreloadOptions)
 {
-    // Preload rooms summaries
-    MXFileStorePreloadOptionRoomSummary = 1 << 0,
-
     // Preload rooms states
-    MXFileStorePreloadOptionRoomState = 1 << 1,
+    MXFileStorePreloadOptionRoomState = 1 << 0,
 
     // Preload rooms account data
-    MXFileStorePreloadOptionRoomAccountData = 1 << 2,
+    MXFileStorePreloadOptionRoomAccountData = 1 << 1,
     
     // Preload rooms messages
-    MXFileStorePreloadOptionRoomMessages = 1 << 3,
+    MXFileStorePreloadOptionRoomMessages = 1 << 2,
 
     // Preload read receipts
-    MXFileStorePreloadOptionReadReceipts = 1 << 4
+    MXFileStorePreloadOptionReadReceipts = 1 << 3
 };
 
 /**
@@ -155,15 +152,6 @@ typedef NS_OPTIONS(NSInteger, MXFileStorePreloadOptions)
            failure:(nullable void (^)(NSError *error))failure;
 
 /**
- Get the list of all stored rooms summaries.
- 
- @param success A block object called when the operation succeeds.
- @param failure A block object called when the operation fails.
- */
-- (void)asyncRoomsSummaries:(void (^)(NSArray<id<MXRoomSummaryProtocol>> * _Nonnull))success
-                    failure:(nullable void (^)(NSError * _Nonnull))failure;
-
-/**
  Get the stored account data for a specific room.
  
  @param roomId the Id of the room
@@ -178,9 +166,16 @@ typedef NS_OPTIONS(NSInteger, MXFileStorePreloadOptions)
 #pragma mark - Sync API (Do not use them on the main thread)
 
 /**
- Load metadata for the store. Sets eventStreamToken.
+ Calls `loadMetaData:` with `enableClearData` as YES.
  */
 - (void)loadMetaData;
+
+/**
+ Load metadata for the store. Sets eventStreamToken.
+
+ @param enableClearData flag to enable clearing data in case of eventStreamToken is missing.
+ */
+- (void)loadMetaData:(BOOL)enableClearData;
 
 /**
  Get the room store for a given room.

@@ -22,6 +22,9 @@
 #import "MXMockCallStack.h"
 #import "MXMockCallStackCall.h"
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
+
 @interface MXVoIPTests : XCTestCase
 {
     MatrixSDKTestsData *matrixSDKTestsData;
@@ -100,7 +103,7 @@
             [expectation fulfill];
         }];
 
-        [aliceRestClient sendEventToRoom:roomId eventType:kMXEventTypeStringCallInvite content:content txnId:nil success:nil failure:^(NSError *error) {
+        [aliceRestClient sendEventToRoom:roomId threadId:nil eventType:kMXEventTypeStringCallInvite content:content txnId:nil success:nil failure:^(NSError *error) {
             XCTFail(@"Cannot set up intial test conditions - error: %@", error);
             [expectation fulfill];
         }];
@@ -136,3 +139,5 @@
 
 
 @end
+
+#pragma clang diagnostic pop

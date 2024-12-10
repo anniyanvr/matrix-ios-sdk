@@ -43,7 +43,7 @@ NS_ASSUME_NONNULL_BEGIN
 /**
  An handler on an interactive verification request.
  */
-@interface MXKeyVerificationRequest : NSObject
+@protocol MXKeyVerificationRequest <NSObject>
 
 /**
 Accept an incoming key verification request.
@@ -68,38 +68,29 @@ Accept an incoming key verification request.
                      failure:(void(^ _Nullable)(NSError *error))failure;
 
 /**
- The cancellation reason, if any.
+ Current state of the request
  */
-@property (nonatomic, nullable) MXTransactionCancelCode *reasonCancelCode;
-
-// Current state
 @property (nonatomic, readonly) MXKeyVerificationRequestState state;
 
-// Original data for this request
-@property (nonatomic, readonly) MXEvent *event;
+/**
+ The cancellation reason, if state is cancelled
+ */
+@property (nonatomic, readonly, nullable) MXTransactionCancelCode *reasonCancelCode;
 
 // Is it a request made by our user?
+@property (nonatomic, readonly) NSString *myUserId;
 @property (nonatomic, readonly) BOOL isFromMyUser;
 @property (nonatomic, readonly) BOOL isFromMyDevice;
-
 
 // Shortcuts to the original request
 @property (nonatomic, readonly) NSString *requestId;
 @property (nonatomic, readonly) MXKeyVerificationTransport transport;
-@property (nonatomic, readonly) NSString *fromDevice;
-@property (nonatomic, readonly) uint64_t timestamp;
 @property (nonatomic, readonly) NSArray<NSString*> *methods;
+@property (nullable, nonatomic, readonly) NSString *roomId;
 
 // The other party
 @property (nonatomic, readonly) NSString *otherUser;
 @property (nonatomic, readonly, nullable) NSString *otherDevice;  // This is unknown and nil while the request has not been accepted
-
-
-// Original data from the accepted (aka m.verification.ready) event
-@property (nonatomic, readonly, nullable) MXKeyVerificationReady *acceptedData;
-
-// Shortcuts to the accepted event
-@property (nonatomic, readonly, nullable) NSArray<NSString*> *acceptedMethods;
 
 // Shortcuts of methods according to the point of view
 @property (nonatomic, readonly, nullable) NSArray<NSString*> *myMethods;

@@ -26,8 +26,11 @@ enum MXBackgroundStoreErrorCode: Int {
 
 /// Minimalist MXStore implementation. It uses some real values from an MXFileStore instance.
 class MXBackgroundStore: NSObject, MXStore {
+    
+    // A store service to record if the file store deletes its data
+    var storeService: MXStoreService?
 
-    //  real store
+    // Real store
     private var fileStore: MXFileStore
     
     // Room stores cache
@@ -35,8 +38,9 @@ class MXBackgroundStore: NSObject, MXStore {
     
     init(withCredentials credentials: MXCredentials) {
         fileStore = MXFileStore(credentials: credentials)
-        //  load real eventStreamToken
-        fileStore.loadMetaData()
+        storeService = MXStoreService(store: fileStore, credentials: credentials)
+        //  load real eventStreamToken without enabling clear data
+        fileStore.loadMetaData(false)
     }
     
     //  Return real eventStreamToken, to be able to launch a meaningful background sync
@@ -120,7 +124,7 @@ class MXBackgroundStore: NSObject, MXStore {
     func open(with credentials: MXCredentials, onComplete: (() -> Void)?, failure: ((Error?) -> Void)? = nil) {
     }
     
-    func storeEvent(forRoom roomId: String, event: MXEvent, direction: __MXTimelineDirection) {
+    func storeEvent(forRoom roomId: String, event: MXEvent, direction: MXTimelineDirection) {
     }
     
     func replace(_ event: MXEvent, inRoom roomId: String) {
@@ -161,11 +165,11 @@ class MXBackgroundStore: NSObject, MXStore {
     }
     
     func messagesEnumerator(forRoom roomId: String) -> MXEventsEnumerator {
-        return MXEventsEnumeratorOnArray(messages: [])
+        return MXEventsEnumeratorOnArray(eventIds: [], dataSource: nil)
     }
     
     func messagesEnumerator(forRoom roomId: String, withTypeIn types: [Any]?) -> MXEventsEnumerator {
-        return MXEventsEnumeratorOnArray(messages: [])
+        return MXEventsEnumeratorOnArray(eventIds: [], dataSource: nil)
     }
     
     func relations(forEvent eventId: String, inRoom roomId: String, relationType: String) -> [MXEvent] {
@@ -196,15 +200,15 @@ class MXBackgroundStore: NSObject, MXStore {
     
     func deleteGroup(_ groupId: String) {
     }
-    
-    func storePartialTextMessage(forRoom roomId: String, partialTextMessage: String) {
+
+    func storePartialAttributedTextMessage(forRoom roomId: String, partialAttributedTextMessage: NSAttributedString) {
     }
-    
-    func partialTextMessage(ofRoom roomId: String) -> String? {
+
+    func partialAttributedTextMessage(ofRoom roomId: String) -> NSAttributedString? {
         return nil
     }
     
-    func getEventReceipts(_ roomId: String, eventId: String, sorted sort: Bool, completion: @escaping ([MXReceiptData]) -> Void) {
+    func getEventReceipts(_ roomId: String, eventId: String, threadId: String, sorted sort: Bool, completion: @escaping ([MXReceiptData]) -> Void) {
         DispatchQueue.main.async {
             completion([])
         }
@@ -214,8 +218,12 @@ class MXBackgroundStore: NSObject, MXStore {
         return false
     }
     
-    func getReceiptInRoom(_ roomId: String, forUserId userId: String) -> MXReceiptData? {
+    func getReceiptInRoom(_ roomId: String, threadId: String, forUserId userId: String) -> MXReceiptData? {
         return nil
+    }
+    
+    func getReceiptsInRoom(_ roomId: String, forUserId userId: String) -> [String: MXReceiptData] {
+        return [:]
     }
     
     func loadReceipts(forRoom roomId: String, completion: (() -> Void)? = nil) {
@@ -224,13 +232,29 @@ class MXBackgroundStore: NSObject, MXStore {
         }
     }
     
-    func localUnreadEventCount(_ roomId: String, withTypeIn types: [Any]?) -> UInt {
+    func localUnreadEventCount(_ roomId: String, threadId: String?, withTypeIn types: [Any]?) -> UInt {
         return 0
+    }
+    
+    func localUnreadEventCountPerThread(_ roomId: String, withTypeIn types: [Any]?) -> [String : NSNumber]! {
+        return [:]
+    }
+
+    func newIncomingEvents(inRoom roomId: String, threadId: String?, withTypeIn types: [String]?) -> [MXEvent] {
+        return []
     }
     
     var homeserverWellknown: MXWellKnown?
     
     func storeHomeserverWellknown(_ homeserverWellknown: MXWellKnown) {
+    }
+
+    var homeserverCapabilities: MXCapabilities?
+    func storeHomeserverCapabilities(_ homeserverCapabilities: MXCapabilities) {
+    }
+
+    var supportedMatrixVersions: MXMatrixVersions?
+    func storeSupportedMatrixVersions(_ supportedMatrixVersions: MXMatrixVersions) {
     }
     
     func loadRoomMessages(forRoom roomId: String, completion: (() -> Void)? = nil) {
@@ -255,19 +279,64 @@ class MXBackgroundStore: NSObject, MXStore {
         return []
     }
     
-    //  MARK: - MXRoomSummaryStore
+    var roomSummaryStore: MXRoomSummaryStore {
+        return self
+    }
+
+    var roomIds: [String] {
+        return []
+    }
+    
+    func setUnreadForRoom(_ roomId: String) {
+        //  no-op
+    }
+    
+    func resetUnread(forRoom roomId: String) {
+        //  no-op
+    }
+    
+    func isRoomMarked(asUnread roomId: String) -> Bool {
+        return false
+    }
+    
+    func removeAllMessagesSent(before limitTs: UInt64, inRoom roomId: String) -> Bool {
+        // Not sure if this needs to be implemented
+        false
+    }
+}
+
+//  MARK: - MXRoomSummaryStore
+
+extension MXBackgroundStore: MXRoomSummaryStore {
     
     var rooms: [String] {
         return []
     }
     
-    func storeSummary(forRoom roomId: String, summary: MXRoomSummaryProtocol) {
+    var countOfRooms: UInt {
+        return 0
+    }
+    
+    func storeSummary(_ summary: MXRoomSummaryProtocol) {
         
     }
     
     //  Fetch real soom summary
     func summary(ofRoom roomId: String) -> MXRoomSummaryProtocol? {
-        return fileStore.summary(ofRoom: roomId)
+        return fileStore.roomSummaryStore.summary(ofRoom: roomId)
     }
     
+    func removeSummary(ofRoom roomId: String) {
+        
+    }
+    
+    func removeAllSummaries() {
+        
+    }
+    
+    func fetchAllSummaries(_ completion: @escaping ([MXRoomSummaryProtocol]) -> Void) {
+        DispatchQueue.main.async {
+            completion([])
+        }
+    }
 }

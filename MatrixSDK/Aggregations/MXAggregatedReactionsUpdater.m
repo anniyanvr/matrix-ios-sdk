@@ -619,19 +619,21 @@
     MXRoom *room = [self.mxSession roomWithRoomId:roomId];
     if (!room)
     {
-        MXLogError(@"[MXAggregations] sendReaction Error: Unknown room: %@", roomId);
+        MXLogErrorDetails(@"[MXAggregations] sendReaction Error: Unknown room", @{
+            @"room_id": roomId ?: @"unknown"
+        });
         return nil;
     }
 
     NSDictionary *reactionContent = @{
-                                      @"m.relates_to": @{
-                                              @"rel_type": @"m.annotation",
-                                              @"event_id": eventId,
-                                              @"key": reaction
-                                              }
-                                      };
+        kMXEventRelationRelatesToKey: @{
+            kMXEventContentRelatesToKeyRelationType: MXEventRelationTypeAnnotation,
+            kMXEventContentRelatesToKeyEventId: eventId,
+            kMXEventContentRelatesToKeyKey: reaction
+        }
+    };
 
-    return [room sendEventOfType:kMXEventTypeStringReaction content:reactionContent localEcho:nil success:^(NSString *eventId) {
+    return [room sendEventOfType:kMXEventTypeStringReaction content:reactionContent threadId:nil localEcho:nil success:^(NSString *eventId) {
         success();
     } failure:failure];
 }

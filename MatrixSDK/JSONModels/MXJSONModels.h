@@ -21,10 +21,13 @@
 #import "MXUsersDevicesMap.h"
 #import "MXKeyBackupVersion.h"
 #import "MXKeyBackupData.h"
-#import "MXMegolmBackupAuthData.h"
 #import "MXLoginTerms.h"
 #import "MXWellKnown.h"
 #import "MXCrossSigningInfo.h"
+#import "MXEnumConstants.h"
+#import "MXWarnings.h"
+
+MX_ASSUME_MISSING_NULLABILITY_BEGIN
 
 @class MXEvent, MXDeviceInfo, MXKey, MXUser;
 
@@ -173,6 +176,18 @@ FOUNDATION_EXPORT NSString *const kMXLoginIdentifierTypePhone;
 @end
 
 /**
+ `MXUsernameAvailability` represents the response returned when checking for username availability.
+ */
+@interface MXUsernameAvailability : MXJSONModel
+
+    /**
+     A flag to indicate that the username is available. This should always be true when the server replies with 200 OK.
+     */
+    @property (nonatomic) BOOL available;
+
+@end
+
+/**
  `MXAuthenticationSession` represents an authentication session returned by the home server.
  */
 @interface MXAuthenticationSession : MXJSONModel
@@ -223,6 +238,16 @@ FOUNDATION_EXPORT NSString *const kMXLoginIdentifierTypePhone;
     @property (nonatomic) NSString *accessToken;
 
     /**
+     The lifetime in milliseconds of the access token. (optional)
+     */
+    @property (nonatomic) uint64_t expiresInMs;
+
+    /**
+     The refresh token, which can be used to obtain new access tokens. (optional)
+    */
+    @property (nonatomic) NSString *refreshToken;
+
+    /**
      The device id.
      */
     @property (nonatomic) NSString *deviceId;
@@ -233,7 +258,6 @@ FOUNDATION_EXPORT NSString *const kMXLoginIdentifierTypePhone;
     @property (nonatomic) MXWellKnown *wellknown;
 
 @end
-
 
 /**
  `MXThirdPartyIdentifier` represents the response to /account/3pid GET request.
@@ -261,7 +285,6 @@ FOUNDATION_EXPORT NSString *const kMXLoginIdentifierTypePhone;
     @property (nonatomic) uint64_t addedAt;
 
 @end
-
 
 /**
  `MXCreateRoomResponse` represents the response to createRoom request.
@@ -390,13 +413,13 @@ FOUNDATION_EXPORT NSString *const kMXRoomTagServerNotice;
 /**
  Presence definitions
  */
-typedef enum : NSUInteger
+typedef NS_ENUM(NSUInteger, MXPresence)
 {
     MXPresenceUnknown,    // The home server did not provide the information
     MXPresenceOnline,
     MXPresenceUnavailable,
     MXPresenceOffline
-} MXPresence;
+};
 
 /**
  Presence definitions - String version
@@ -506,6 +529,17 @@ FOUNDATION_EXPORT NSString *const kMXPresenceOffline;
 /**
  The valid period in seconds of this token.
  */
+@property (nonatomic) uint64_t expiresIn;
+
+@end
+
+/**
+ `MXLoginToken` represents the response of a /login/token creation request
+ */
+@interface MXLoginToken : MXJSONModel
+
+@property (nonatomic) NSString *token;
+
 @property (nonatomic) uint64_t expiresIn;
 
 @end
@@ -744,17 +778,11 @@ FOUNDATION_EXPORT NSString *const kMXPushRuleConditionStringSenderNotificationPe
  Push rule scope definitions - String version
  */
 FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringGlobal;
-FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringDevice;
 
 /**
  `MXPushRulesResponse` represents the response to the /pushRules/ request.
  */
 @interface MXPushRulesResponse : MXJSONModel
-
-    /**
-     Set of push rules specific per device.
-     */
-    // @property (nonatomic) NSDictionary *device;
 
     /**
      Set of global push rules.
@@ -1097,6 +1125,25 @@ FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringDevice;
 
 @end
 
+@interface MXKeysQueryResponseRaw : MXJSONModel
+
+    /**
+     The device keys per devices per users.
+     */
+    @property (nonatomic) NSDictionary<NSString *, id> *deviceKeys;
+
+    /**
+     Cross-signing keys per users.
+     */
+    @property (nonatomic) NSDictionary<NSString*, MXCrossSigningInfo*> *crossSigningKeys;
+
+    /**
+     The failures sorted by homeservers.
+    */
+    @property (nonatomic) NSDictionary *failures;
+
+@end
+
 /**
  `MXKeysClaimResponse` represents the response to /keys/claim request made by
  [MXRestClient claimOneTimeKeysForUsersDevices].
@@ -1117,34 +1164,6 @@ FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringDevice;
      Instead, the corresponding user or device is missing from the one_time_keys result.
      */
     @property (nonatomic) NSDictionary *failures;
-
-@end
-
-#pragma mark - Device Management
-/**
- `MXDevice` represents a device of the current user.
- */
-@interface MXDevice : MXJSONModel
-
-    /**
-     A unique identifier of the device.
-     */
-    @property (nonatomic) NSString *deviceId;
-
-    /**
-     The display name set by the user for this device. Absent if no name has been set.
-     */
-    @property (nonatomic) NSString *displayName;
-
-    /**
-     The IP address where this device was last seen. (May be a few minutes out of date, for efficiency reasons).
-     */
-    @property (nonatomic) NSString *lastSeenIp;
-
-    /**
-     The timestamp (in milliseconds since the unix epoch) when this devices was last seen. (May be a few minutes out of date, for efficiency reasons).
-     */
-    @property (nonatomic) uint64_t lastSeenTs;
 
 @end
 
@@ -1368,32 +1387,121 @@ FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringDevice;
 
 @end
 
-#pragma mark - Dehydration
-
 /**
- `MXDehydratedDevice` represents the dehydrated device of the current user.
+ `MXRoomJoinRuleResponse` represents the enhanced join rule response as per [MSC3083](https://github.com/matrix-org/matrix-doc/pull/3083)
  */
-@interface MXDehydratedDevice : MXJSONModel
+@interface MXRoomJoinRuleResponse : MXJSONModel
 
-    /**
-     A unique identifier of the device.
-     */
-    @property (nonatomic) NSString *deviceId;
+@property (nonatomic) MXRoomJoinRule joinRule;
 
-    /**
-     The encrypted account data of the dehydrated device (libolm's pickle format)
-     */
-    @property (nonatomic) NSString *account;
-
-    /**
-     The algorithm used for encrypting the account data
-     */
-    @property (nonatomic) NSString *algorithm;
-
-    /**
-     The passphrase used for encrypting the account data (optional)
-     */
-    @property (nonatomic) NSString *passphrase;
+@property (nonatomic, nullable) NSArray<NSString *> *allowedParentIds;
 
 @end
 
+#pragma mark - Device Dehydration
+
+@interface MXDehydratedDeviceCreationParameters : MXJSONModel
+
+@property (nonatomic) NSString *body;
+
+@end
+
+@interface MXDehydratedDeviceResponse : MXJSONModel
+
+@property (nonatomic, nonnull) NSString *deviceId;
+
+@property (nonatomic, nonnull) NSDictionary *deviceData;
+
+@end
+
+@interface MXDehydratedDeviceEventsResponse : MXJSONModel
+
+@property (nonatomic) NSArray *events;
+
+@property (nonatomic, nullable) NSString *nextBatch;
+
+@end
+
+#pragma mark - Homeserver Capabilities
+
+@interface MXRoomVersionInfo: NSObject
+
+    /**
+     * version fo the room
+     */
+    @property (nonatomic) NSString *version;
+
+    /**
+     * Status of the room version: "stable" or "unstable"
+     */
+    @property (nonatomic) NSString *statusString;
+
+@end
+
+/**
+ * give the list of capabilities of the server and their related room versions
+ *
+ *  "room_capabilities": {
+ *      "knock" : {
+ *              "preferred": "7",
+ *              "support" : ["7"]
+ *      },
+ *      "restricted" : {
+ *              "preferred": "9",
+ *              "support" : ["8", "9"]
+ *      }
+ * }
+ */
+@interface MXRoomCapabilitySupport: MXJSONModel
+
+    /**
+     * Preferred version for this capability
+     */
+    @property (nonatomic) NSString *preferred;
+
+    /**
+     * List of room versions that support this capability
+     */
+    @property (nonatomic) NSArray<NSString *> *support;
+
+@end
+
+@interface MXRoomVersionCapabilities: MXJSONModel
+
+    /**
+     * Actual default version used for creating rooms in this server
+     */
+    @property (nonatomic) NSString *defaultRoomVersion;
+
+    /**
+     * Keys are capabilities defined per spec, as for now knock or restricted
+     */
+    @property (nonatomic) NSArray<MXRoomVersionInfo *> *supportedVersions;
+
+    /**
+     * Keys are capabilities defined per spec, as for now knock or restricted
+     */
+    @property (nonatomic, nullable) NSDictionary<NSString *, MXRoomCapabilitySupport *> *roomCapabilities;
+
+@end
+
+/**
+ `MXHomeserverCapabilities` the capabilities of the current homeserver
+ */
+@interface MXHomeserverCapabilities : MXJSONModel
+
+    /**
+     * True if it is possible to change the password of the account.
+     */
+    @property (nonatomic) BOOL canChangePassword;
+
+    /**
+     * Room versions supported by the server
+     * This capability describes the default and available room versions a server supports, and at what level of stability.
+     * Clients should make use of this capability to determine if users need to be encouraged to upgrade their rooms.
+     */
+    @property (nonatomic, nullable) MXRoomVersionCapabilities *roomVersions;
+
+@end
+
+MX_ASSUME_MISSING_NULLABILITY_END

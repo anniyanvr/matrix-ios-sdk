@@ -21,11 +21,11 @@ class MXEventAnnotationUnitTests: XCTestCase {
 
     let eventJSON: [String : Any] = [
         "event_id": "$eventId",
-        "type": "m.room.message",
+        "type": kMXEventTypeStringRoomMessage,
         "origin_server_ts": 0,
         "unsigned": [
             "m.relations": [
-                "m.annotation": [
+                MXEventRelationTypeAnnotation: [
                     "chunk": [
                         [
                             "type": "m.reaction",
@@ -39,12 +39,6 @@ class MXEventAnnotationUnitTests: XCTestCase {
             ]
         ]
         ]
-
-    override func setUp() {
-    }
-
-    override func tearDown() {
-    }
 
     func testModelFromJSON() {
         let event = MXEvent(fromJSON: eventJSON)
@@ -72,7 +66,6 @@ class MXEventAnnotationUnitTests: XCTestCase {
         }
     }
 
-    @available(iOS 9.0, OSX 10.11, *)
     func testNSCoding() {
         let event = MXEvent(fromJSON: eventJSON)
 

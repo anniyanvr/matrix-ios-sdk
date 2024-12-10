@@ -15,7 +15,6 @@
  */
 
 #import <Foundation/Foundation.h>
-#import <OLMKit/OLMKit.h>
 
 #import "MXSDKOptions.h"
 
@@ -84,6 +83,12 @@
 - (void)loginUserOnANewDevice:(XCTestCase*)testCase
                   credentials:(MXCredentials*)credentials
                  withPassword:(NSString*)password
+                   onComplete:(void (^)(MXSession *newSession))onComplete;
+
+- (void)loginUserOnANewDevice:(XCTestCase*)testCase
+                  credentials:(MXCredentials*)credentials
+                 withPassword:(NSString*)password
+                        store:(id<MXStore>)store
                    onComplete:(void (^)(MXSession *newSession))onComplete;
 
 

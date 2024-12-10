@@ -25,13 +25,15 @@ internal class MockRoomSummary: NSObject, MXRoomSummaryProtocol {
     
     var avatar: String?
     
-    var displayname: String?
+    var displayName: String?
     
     var topic: String?
     
     var creatorUserId: String = "@room_creator:some_domain.com"
     
     var aliases: [String] = []
+    
+    var historyVisibility: String? = nil
     
     var joinRule: String? = kMXRoomJoinRuleInvite
     
@@ -59,6 +61,18 @@ internal class MockRoomSummary: NSObject, MXRoomSummaryProtocol {
     
     var highlightCount: UInt = 0
     
+    var hasAnyUnread: Bool {
+        return localUnreadEventCount > 0
+    }
+    
+    var hasAnyNotification: Bool {
+        return notificationCount > 0
+    }
+    
+    var hasAnyHighlight: Bool {
+        return highlightCount > 0
+    }
+    
     var isDirect: Bool {
         return isTyped(.direct)
     }
@@ -80,6 +94,8 @@ internal class MockRoomSummary: NSObject, MXRoomSummaryProtocol {
     var spaceChildInfo: MXSpaceChildInfo?
     
     var parentSpaceIds: Set<String> = []
+    
+    var userIdsSharingLiveBeacon: Set<String> = []
     
     init(withRoomId roomId: String) {
         self.roomId = roomId
@@ -108,7 +124,6 @@ internal class MockRoomSummary: NSObject, MXRoomSummaryProtocol {
     }
     
     override var description: String {
-        return "<MockRoomSummary: \(roomId) \(String(describing: displayname))>"
+        return "<MockRoomSummary: \(roomId) \(String(describing: displayName))>"
     }
-    
 }

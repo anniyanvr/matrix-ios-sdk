@@ -18,9 +18,9 @@
 
 #import "MXCallKitAdapter.h"
 
-@import AVFoundation;
-@import CallKit;
-@import UIKit;
+#import <AVFoundation/AVFoundation.h>
+#import <CallKit/CallKit.h>
+#import <UIKit/UIKit.h>
 
 #import "MXCall.h"
 #import "MXCallAudioSessionConfigurator.h"
@@ -52,7 +52,7 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
     {
         CXProviderConfiguration *providerConfiguration = [[CXProviderConfiguration alloc] initWithLocalizedName:configuration.name];
         providerConfiguration.ringtoneSound = configuration.ringtoneName;
-        providerConfiguration.maximumCallGroups = 1;
+        providerConfiguration.maximumCallGroups = configuration.maximumCallGroups;
         providerConfiguration.maximumCallsPerCallGroup = 1;
         providerConfiguration.supportedHandleTypes = [NSSet setWithObject:@(CXHandleTypeGeneric)];
         providerConfiguration.supportsVideo = configuration.supportsVideo;
@@ -71,6 +71,22 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
     }
     
     return self;
+}
+
+- (void)resetProvider
+{
+    // Recreating CXProvider can help resolving issues, such as failure to hang up a call
+    // resulting in a "stuck" call.
+    // https://github.com/vector-im/element-ios/issues/5189
+    MXLogDebug(@"[MXCallKitAdapter]: Resetting provider");
+    
+    CXProviderConfiguration *configuration = self.provider.configuration;
+    [self.provider setDelegate:nil queue:nil];
+    [self.provider invalidate];
+    self.provider = nil;
+    
+    self.provider = [[CXProvider alloc] initWithConfiguration:configuration];
+    [self.provider setDelegate:self queue:nil];
 }
 
 - (void)dealloc
@@ -108,6 +124,11 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
 
         CXTransaction *transaction = [[CXTransaction alloc] initWithAction:action];
         [self.callController requestTransaction:transaction completion:^(NSError * _Nullable error) {
+            if (error)
+            {
+                MXLogDebug(@"[MXCallKitAdapter]: Error requesting CXStartCallAction: '%@'", error.localizedDescription);
+            }
+            
             CXCallUpdate *update = [[CXCallUpdate alloc] init];
             update.remoteHandle = handle;
             update.localizedCallerName = contactIdentifier;
@@ -132,7 +153,15 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
     {
         CXEndCallAction *action = [[CXEndCallAction alloc] initWithCallUUID:call.callUUID];
         CXTransaction *transaction = [[CXTransaction alloc] initWithAction:action];
-        [self.callController requestTransaction:transaction completion:^(NSError *_Nullable error){}];
+        [self.callController requestTransaction:transaction completion:^(NSError *_Nullable error){
+            if (error)
+            {
+                MXLogDebug(@"[MXCallKitAdapter]: Error requesting CXEndCallAction: '%@'", error.localizedDescription);
+                // If the request to end call failed, reset the provider to avoid "stuck" call
+                // https://github.com/vector-im/element-ios/issues/5189
+                [self resetProvider];
+            }
+        }];
     }
     else
     {
@@ -197,6 +226,14 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
     update.supportsUngrouping = NO;
     update.supportsDTMF = NO;
     
+    // If the user tap the "Answer" button from Element's timeline, very often, he can't hear the other user.
+    // It's because the audio session is not configured at the beginiing of the call.
+    // It's a flaw in CallKit implementation.
+    // The audio session need to be configured earlier, like here.
+    //
+    // See https://developer.apple.com/forums/thread/64544 (7th post from Apple Engineer)
+    [self.audioSessionConfigurator configureAudioSessionForVideoCall:call.isVideoCall];
+    
     [self.provider reportNewIncomingCallWithUUID:callUUID update:update completion:^(NSError * _Nullable error) {
         if (error)
         {
@@ -221,7 +258,10 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
         CXTransaction *transaction = [[CXTransaction alloc] initWithAction:answerCallAction];
         
         [self.callController requestTransaction:transaction completion:^(NSError * _Nullable error) {
-            
+            if (error)
+            {
+                MXLogDebug(@"[MXCallKitAdapter]: Error requesting CXAnswerCallAction: '%@'", error.localizedDescription);
+            }
         }];
     }
     else
@@ -245,7 +285,10 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
     CXTransaction *transaction = [[CXTransaction alloc] initWithAction:holdCallAction];
 
     [self.callController requestTransaction:transaction completion:^(NSError *error) {
-        
+        if (error)
+        {
+            MXLogDebug(@"[MXCallKitAdapter]: Error requesting CXSetHeldCallAction: '%@'", error.localizedDescription);
+        }
     }];
 }
 
@@ -341,7 +384,7 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
     if (call)
     {
         [call hangup];
-        [self.calls removeObjectForKey:action.UUID];
+        [self.calls removeObjectForKey:action.callUUID];
         [self.audioSessionConfigurator configureAudioSessionAfterCallEnds];
     }
     
@@ -366,7 +409,7 @@ NSString * const kMXCallKitAdapterAudioSessionDidActive = @"kMXCallKitAdapterAud
 {
     if (call.isConferenceCall)
     {
-        onComplete(call.room.summary.displayname);
+        onComplete(call.room.summary.displayName);
     }
     else
     {

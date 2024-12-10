@@ -169,7 +169,7 @@ FOUNDATION_EXPORT NSUInteger const MXRoomSummaryPaginationChunkSize;
 /**
  The computed display name of the room.
  */
-@property (nonatomic) NSString *displayname;
+@property (nonatomic) NSString *displayName;
 
 /**
  The topic of the room.
@@ -185,6 +185,11 @@ FOUNDATION_EXPORT NSUInteger const MXRoomSummaryPaginationChunkSize;
  The aliases of this room.
  */
 @property (nonatomic) NSArray<NSString *> *aliases;
+
+/**
+ The history visibility of the room.
+ */
+@property (nonatomic) MXRoomHistoryVisibility historyVisibility;
 
 /**
  Join rule for the room.
@@ -344,6 +349,9 @@ FOUNDATION_EXPORT NSUInteger const MXRoomSummaryPaginationChunkSize;
  Parent space identifiers.
  */
 @property (nonatomic) NSSet<NSString*> *parentSpaceIds;
+
+/// User ids of users sharing active beacon in the room
+@property (nonatomic) NSSet<NSString*> *userIdsSharingLiveBeacon;
 
 /**
  Mark all messages as read.

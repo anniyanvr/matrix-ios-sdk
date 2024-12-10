@@ -271,6 +271,9 @@ typedef void (^HandleOfferBlock)(dispatch_block_t);
     HandleOfferBlock handleOfferBlock = ^(dispatch_block_t completion){
         RTCSessionDescription *sessionDescription = [[RTCSessionDescription alloc] initWithType:RTCSdpTypeOffer sdp:sdpOffer];
         MXWeakify(self);
+        MXLogDebug(@"[MXJingleCallStackCall] handleOffer: willSetRemoteDescription with peerConnection: %@ sdp: %@",
+                   self->peerConnection,
+                   sdpOffer);
         [self->peerConnection setRemoteDescription:sessionDescription completionHandler:^(NSError * _Nullable error) {
             MXLogDebug(@"[MXJingleCallStackCall] handleOffer: setRemoteDescription: error: %@", error);
             
@@ -447,19 +450,21 @@ typedef void (^HandleOfferBlock)(dispatch_block_t);
 
 - (BOOL)canSendDTMF
 {
-    id<RTCDtmfSender> dtmfSender = peerConnection.senders.firstObject.dtmfSender;
-    
-    if (dtmfSender == nil)
+    return [self dtmfSender];
+}
+
+- (id<RTCDtmfSender>)dtmfSender
+{
+    for(RTCRtpSender *sender in peerConnection.senders)
     {
-        return NO;
+        if ([sender.track.kind isEqualToString: kRTCMediaStreamTrackKindAudio] && sender.dtmfSender.canInsertDtmf) {
+            return sender.dtmfSender;
+        }
     }
-    
-    return dtmfSender.canInsertDtmf;
+    return nil;
 }
 
 - (BOOL)sendDTMF:(NSString *)tones
-        duration:(NSUInteger)duration
-    interToneGap:(NSUInteger)interToneGap;
 {
     if (!self.canSendDTMF)
     {
@@ -467,34 +472,7 @@ typedef void (^HandleOfferBlock)(dispatch_block_t);
         return NO;
     }
     
-    id<RTCDtmfSender> dtmfSender = peerConnection.senders.firstObject.dtmfSender;
-    
-    if (duration == 0)
-    {
-        //  use default or last used value
-        duration = dtmfSender.duration;
-    }
-    else
-    {
-        //  limit lower bound
-        duration = MAX(duration, 70);
-        
-        //  limit upper bound
-        duration = MIN(duration, 6000);
-    }
-    
-    if (interToneGap == 0)
-    {
-        //  use default or last used value
-        interToneGap = dtmfSender.interToneGap;
-    }
-    else
-    {
-        //  limit lower bound
-        interToneGap = MAX(interToneGap, 50);
-    }
-    
-    return [dtmfSender insertDtmf:tones duration:duration interToneGap:interToneGap];
+    return [[self dtmfSender] insertDtmf:tones duration:.1 interToneGap:0.07];
 }
 
 #pragma mark - RTCPeerConnectionDelegate

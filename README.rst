@@ -1,3 +1,15 @@
+.. image:: https://img.shields.io/cocoapods/v/MatrixSDK?style=flat-square
+   :target: https://github.com/matrix-org/matrix-ios-sdk/releases
+.. image:: https://img.shields.io/cocoapods/p/MatrixSDK?style=flat-square
+   :target: README.rst
+.. image:: https://img.shields.io/github/workflow/status/matrix-org/matrix-ios-sdk/Lint%20CI/develop?style=flat-square
+   :target: https://github.com/matrix-org/matrix-ios-sdk/actions?query=branch%3Adevelop
+.. image:: https://codecov.io/gh/matrix-org/matrix-ios-sdk/branch/develop/graph/badge.svg?token=2c9mzJoVpu
+   :target: https://codecov.io/gh/matrix-org/matrix-ios-sdk
+.. image:: https://img.shields.io/badge/License-Apache%202.0-yellowgreen.svg?style=flat-square
+   :target: https://opensource.org/licenses/Apache-2.0
+
+==============
 Matrix iOS SDK
 ==============
 
@@ -9,6 +21,18 @@ This SDK implements an interface to communicate with the Matrix Client/Server
 API which is defined at http://matrix.org/docs/api/client-server/.
 
 
+Pod Deprecation
+===============
+
+The SDK is no longer published directly to Cocopods following recent linting issues
+with Xcode 14.3 and greater: `CocoaPods/CocoaPods#11839 <https://github.com/CocoaPods/CocoaPods/issues/11839>`_.
+This deprecation *only* covers the published pod, the SDK is still being maintained.
+
+It is however worth noting that we're now primarily focussed on the `Matrix Rust SDK <https://github.com/matrix-org/matrix-rust-sdk>`_ 
+and its respective FFI bindings which are available as a `Swift package <https://github.com/matrix-org/matrix-rust-components-swift/>`_.
+This would likely be a more sensible choice for anyone starting a new project using Matrix on Apple platforms.
+
+
 Use the SDK in your app
 =======================
 
@@ -18,24 +42,13 @@ In order to set this up::
     sudo gem install cocoapods
     pod setup
 
-The best way to add the last release of the Matrix SDK to your application
-project is to add the MatrixSDK dependency to your Podfile::
+The best way to add the Matrix SDK to your application is to add the MatrixSDK repo to your Podfile::
 
-    # Obj-C
-    pod 'MatrixSDK'
+    pod 'MatrixSDK', :git => 'https://github.com/matrix-org/matrix-ios-sdk.git', :tag => 'vX.Y.Z'
 
-If you want to use the develop version of the SDK, use instead:
-
-    # Obj-C
-    pod 'MatrixSDK', :git => 'https://github.com/matrix-org/matrix-ios-sdk.git',
-    :branch => 'develop'
 
 Options
 =======
-If you want also Swift support, add the following pod to your app Podfile::
-
-    pod 'MatrixSDK/SwiftSupport'
-
 If you want to enable VoIP using the http://webrtc.org VoIP stack, add the following pod to your app Podfile::
 
     pod 'MatrixSDK/JingleCallStack'
@@ -78,6 +91,35 @@ They contain logic to maintain consistent chat room data.
      This is a user known by the current user, outside of the context of a
      room. MXSession exposes and maintains the list of MXUsers. It provides
      the user id, displayname and the current presence state.
+
+End-to-end Encryption
+---------------------
+All core E2EE functionality is implemented in an external `matrix-sdk-crypto <https://github.com/matrix-org/matrix-rust-sdk/tree/main/crates/matrix-sdk-crypto>`_
+Rust crate, which replaces all previous obj-c / Swift implementation that used to exist in this repository.
+`MatrixSDK` integrates this crate via `pod MatrixSDKCrypto` published `separately <https://github.com/matrix-org/matrix-rust-sdk/tree/main/bindings/apple#publishing-matrixsdkcrypto>`_.
+
+Code in `MatrixSDK` consists mostly of wrappers, networking logic and glue code connecting encryption with
+general app functionality, sync loops and session state. Some of the notable classes include:
+
+:``MXCrypto``:
+    Main entry-point into all cryptographic functionality, such as encrypting/decrypting
+    events, cross-signing users, or managing room key backups. It is owned by the current
+    session and therefore specific to the current user. 
+
+:``MXRoomEventEncryption``/``MXRoomEventDecryption``:
+    Two classes responsible for encrypting and decrypting message events and tasks that
+    are closely dependent, such as sharing room keys, reacting to late key-shares etc.
+
+:``MXCryptoMachine``:
+    Wrapper around Rust-based `OlmMachine`, providing a more convenient API. Its three main
+    responsibilities are:
+    - adding a layer of abstraction between `MatrixSDK` and `MatrixSDKCrypto`
+    - mapping to and from raw strings passed into the Rust machine
+    - performing network requests and marking them as completed on behalf of the Rust machine
+
+To publish a new version of `MatrixSDKCrypto` follow a `separate process <https://github.com/matrix-org/matrix-rust-sdk/tree/main/bindings/apple#publishing-matrixsdkcrypto>`_.
+To test local / unpublished changes in `MatrixSDKCrypto`, `build the framework <https://github.com/matrix-org/matrix-rust-sdk/tree/main/bindings/apple#building-only-the-crypto-sdk>`_
+and re-direct the pod in your `Podfile` to `pod MatrixSDKCrypto, :path => your/local/rust-crypto-sdk/MatrixSDKCrypto.podspec`
 
 Usage
 =====
@@ -467,28 +509,44 @@ Then, open ``MatrixSDK.xcworkspace``.
 
 Tests
 =====
-The tests in the SDK Xcode project are both unit and integration tests. 
+The tests in the SDK Xcode project are both unit and integration tests.
 
 Unit tests classes use the suffix "UnitTests" to differentiate them. A unit test is a test that does not make any HTTP requests or uses mocked HTTP requests.
 
 Out of the box, the tests use one of the homeservers (located at
 http://localhost:8080) of the "Demo Federation of Homeservers"
-(https://github.com/matrix-org/synapse#running-a-demo-federation-of-synapses).
+(https://matrix-org.github.io/synapse/develop/development/demo.html?highlight=demo#synapse-demo-setup).
+
+Before you install synapse you may need few dependencies to be installed on Mac OS:
+
+- **Homebrew**: run ``/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)”``. More information can be found here https://brew.sh
+- **python 3**: downloading the latest stable version should be fine. Download the ``.pkg`` and install it from here https://www.python.org/downloads/
+- **pipx**: with python installed run ``pip3 install --user pipx``
+- **Rust**: run ``curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh``. more information can be found here https://www.rust-lang.org/tools/install
+- **icu4c**: Run ``brew install icu4c``
+- **Update env variables for icu4c**: if you use zsh run ``echo 'export PATH="/opt/homebrew/opt/icu4c/bin:$PATH"' >> ~/.zshrc``. Otherwise try to update ``.bash_profile`` in the same way. You may have configured another folder for brew binaries. In that case try to run ``brew info icu4c`` to spot the correct path.
+- **pg_config**: you can get it by running ``brew install postgresql``
 
 You first need to follow instructions to set up Synapse in development mode at https://github.com/matrix-org/synapse#synapse-development.
-If you have already installed all dependencies, the steps are::
+The cookbook is::
 
+      $ pip install --user pipx
+      $ python3 -m pipx ensurepath   # To run if `pipx install poetry` complained about PATH not being correctly set
+      $ pipx install poetry
       $ git clone https://github.com/matrix-org/synapse.git
       $ cd synapse
-      $ virtualenv -p python3 env
-      $ source env/bin/activate
-      (env) $ python -m pip install --no-use-pep517 -e .
+      $ poetry install --extras all
 
-Every time you want to launch these test homeservers, type::
+To launch these test homeservers, type from the synapse root folder::
 
-      $ virtualenv -p python3 env
-      $ source env/bin/activate
-      (env) $ demo/start.sh --no-rate-limit
+      $ poetry run ./demo/start.sh --no-rate-limit
+
+To verify that the synapse instance is actually running correctly, open a web browser and go to `http://127.0.0.1:8080`. A web page should confirm it.
+
+To stop and reset the servers::
+
+      $ poetry run ./demo/stop.sh
+      $ poetry run ./demo/clean.sh
 
 You can now run tests from the Xcode Test navigator tab or select the
 MatrixSDKTests scheme and click on the "Test" action.

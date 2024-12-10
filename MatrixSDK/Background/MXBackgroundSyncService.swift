@@ -40,9 +40,8 @@ public enum MXBackgroundSyncServiceError: Error {
     private let processingQueue: DispatchQueue
     public let credentials: MXCredentials
     private let syncResponseStoreManager: MXSyncResponseStoreManager
+    private let crypto: MXBackgroundCrypto
     private var store: MXStore
-    private let cryptoStore: MXBackgroundCryptoStore
-    private let olmDevice: MXOlmDevice
     private let restClient: MXRestClient
     private var pushRulesManager: MXBackgroundPushRulesManager
     
@@ -66,7 +65,11 @@ public enum MXBackgroundSyncServiceError: Error {
     
     /// Initializer
     /// - Parameter credentials: account credentials
-    public init(withCredentials credentials: MXCredentials) {
+    public init(
+        withCredentials credentials: MXCredentials,
+        persistTokenDataHandler: MXRestClientPersistTokenDataHandler? = nil,
+        unauthenticatedHandler: MXRestClientUnauthenticatedHandler? = nil
+    ) {
         processingQueue = DispatchQueue(label: "MXBackgroundSyncServiceQueue-" + MXTools.generateSecret())
         self.credentials = credentials
         
@@ -76,37 +79,42 @@ public enum MXBackgroundSyncServiceError: Error {
         let syncResponseStore = MXSyncResponseFileStore(withCredentials: credentials)
         syncResponseStoreManager = MXSyncResponseStoreManager(syncResponseStore: syncResponseStore)
         
-        restClient = MXRestClient(credentials: credentials, unrecognizedCertificateHandler: nil)
+        let restClient = MXRestClient(
+            credentials: credentials,
+            unrecognizedCertificateHandler: nil,
+            persistentTokenDataHandler: persistTokenDataHandler,
+            unauthenticatedHandler: unauthenticatedHandler
+        )
         restClient.completionQueue = processingQueue
-        store = MXBackgroundStore(withCredentials: credentials)
-        // We can flush any crypto data if our sync response store is empty
-        let resetBackgroundCryptoStore = syncResponseStoreManager.syncToken() == nil
-        cryptoStore = MXBackgroundCryptoStore(credentials: credentials, resetBackgroundCryptoStore: resetBackgroundCryptoStore)
+        self.restClient = restClient
         
-        olmDevice = MXOlmDevice(store: cryptoStore)
+        store = MXBackgroundStore(withCredentials: credentials)
+        
+        MXLog.debug("[MXBackgroundSyncService] init: constructing crypto")
+        crypto = MXBackgroundCryptoV2(credentials: credentials, restClient: restClient)
+        
         pushRulesManager = MXBackgroundPushRulesManager(withCredentials: credentials)
-        if let accountData = syncResponseStoreManager.syncResponseStore.accountData {
-            pushRulesManager.handleAccountData(accountData)
-        } else if let accountData = store.userAccountData ?? nil {
-            pushRulesManager.handleAccountData(accountData)
-        }
+        MXLog.debug("[MXBackgroundSyncService] init complete")
         super.init()
+        syncPushRuleManagerWithAccountData()
     }
     
     /// Fetch event with given event and room identifiers. It performs a sync if the event not found in session store.
     /// - Parameters:
     ///   - eventId: The event identifier for the desired event
     ///   - roomId: The room identifier for the desired event
+    ///   - allowSync:Whether to check local stores on every request so that we use up-to-data data from the MXSession store
     ///   - completion: Completion block to be called. Always called in main thread.
     public func event(withEventId eventId: String,
                       inRoom roomId: String,
+                      allowSync: Bool = true,
                       completion: @escaping (MXResponse<MXEvent>) -> Void) {
         // Process one request at a time
         let stopwatch = MXStopwatch()
         asyncTaskQueue.async { (taskCompleted) in
             MXLog.debug("[MXBackgroundSyncService] event: Start processing \(eventId) after waiting for \(stopwatch.readable())")
             
-            self._event(withEventId: eventId, inRoom: roomId) { response in
+            self._event(withEventId: eventId, inRoom: roomId, allowSync: allowSync) { response in
                 completion(response)
                 taskCompleted()
             }
@@ -179,7 +187,7 @@ public enum MXBackgroundSyncServiceError: Error {
     /// - Parameter roomId: The room identifier to fetch.
     /// - Returns: Summary of room.
     public func roomSummary(forRoomId roomId: String) -> MXRoomSummaryProtocol? {
-        let summary = store.summary(ofRoom: roomId)
+        let summary = store.roomSummaryStore.summary(ofRoom: roomId)
         return syncResponseStoreManager.roomSummary(forRoomId: roomId, using: summary)
     }
     
@@ -195,11 +203,45 @@ public enum MXBackgroundSyncServiceError: Error {
                                          currentUserDisplayName:  roomState.members.member(withUserId: currentUserId)?.displayname)
     }
     
+    /// Fetch room account data for given roomId.
+    /// - Parameters:
+    ///   - roomId: The room identifier for the desired room.
+    ///   - completion: Completion block to be called. Always called in main thread.
+    public func roomAccountData(forRoomId roomId: String,
+                                completion: @escaping (MXResponse<MXRoomAccountData>) -> Void) {
+        processingQueue.async {
+            guard let accountData = self.store.accountData?(ofRoom: roomId) else {
+                Queues.dispatchQueue.async {
+                    completion(.failure(MXBackgroundSyncServiceError.unknown))
+                }
+                return
+            }
+            
+            Queues.dispatchQueue.async {
+                completion(.success(accountData))
+            }
+        }
+    }
+    
+    public func readMarkerEvent(forRoomId roomId: String, completion: @escaping (MXResponse<MXEvent>) -> Void) {
+        roomAccountData(forRoomId: roomId) { [weak self] response in
+            guard let self = self else { return }
+            
+            switch response {
+            case .failure(let error):
+                completion(.failure(error))
+                return
+            case .success(let roomAccountData):
+                self._event(withEventId: roomAccountData.readMarkerEventId, inRoom: roomId, allowSync: false, completion: completion)
+            }
+        }
+    }
+    
     //  MARK: - Private
     
     private func _event(withEventId eventId: String,
                         inRoom roomId: String,
-                        allowSync: Bool = true,
+                        allowSync: Bool,
                         completion: @escaping (MXResponse<MXEvent>) -> Void) {
         MXLog.debug("[MXBackgroundSyncService] fetchEvent: \(eventId). allowSync: \(allowSync)")
         
@@ -244,12 +286,12 @@ public enum MXBackgroundSyncServiceError: Error {
             }
             
             //  should decrypt it first
-            if canDecryptEvent(event) {
+            if crypto.canDecryptEvent(event) {
                 //  we have keys to decrypt the event
                 MXLog.debug("[MXBackgroundSyncService] fetchEvent: Event needs to be decrpyted, and we have the keys to decrypt it.")
                 
                 do {
-                    try decryptEvent(event)
+                    try crypto.decryptEvent(event)
                     Queues.dispatchQueue.async {
                         completion(.success(event))
                     }
@@ -259,7 +301,7 @@ public enum MXBackgroundSyncServiceError: Error {
                 }
             } else {
                 //  we don't have keys to decrypt the event
-                MXLog.debug("[MXBackgroundSyncService] fetchEvent: Event needs to be decrpyted, but we don't have the keys to decrypt it.")
+                MXLog.debug("[MXBackgroundSyncService] fetchEvent: Event needs to be decrypted, but we don't have the keys to decrypt it.")
                 handleDecryptionFailure(withError: nil)
             }
         }
@@ -347,16 +389,18 @@ public enum MXBackgroundSyncServiceError: Error {
                     return
                 }
 
-                self.handleSyncResponse(syncResponse, syncToken: eventStreamToken)
-                
-                if let event = self.syncResponseStoreManager.event(withEventId: eventId, inRoom: roomId),
-                    !self.canDecryptEvent(event),
-                    (syncResponse.toDevice?.events ?? []).count > 0 {
-                    //  we got the event but not the keys to decrypt it. continue to sync
-                    self.launchBackgroundSync(forEventId: eventId, roomId: roomId, completion: completion)
-                } else {
-                    //  do not allow to sync anymore
-                    self._event(withEventId: eventId, inRoom: roomId, allowSync: false, completion: completion)
+                Task {
+                    await self.handleSyncResponse(syncResponse, syncToken: eventStreamToken)
+                    
+                    if let event = self.syncResponseStoreManager.event(withEventId: eventId, inRoom: roomId),
+                       !self.crypto.canDecryptEvent(event),
+                       (syncResponse.toDevice?.events ?? []).count > 0 {
+                        //  we got the event but not the keys to decrypt it. continue to sync
+                        self.launchBackgroundSync(forEventId: eventId, roomId: roomId, completion: completion)
+                    } else {
+                        //  do not allow to sync anymore
+                        self._event(withEventId: eventId, inRoom: roomId, allowSync: false, completion: completion)
+                    }
                 }
             case .failure(let error):
                 guard let _ = self else {
@@ -374,120 +418,7 @@ public enum MXBackgroundSyncServiceError: Error {
         }
     }
     
-    private func canDecryptEvent(_ event: MXEvent) -> Bool {
-        if !event.isEncrypted {
-            return true
-        }
-        
-        guard let senderKey = event.content["sender_key"] as? String,
-            let sessionId = event.content["session_id"] as? String else {
-            return false
-        }
-        
-        return cryptoStore.inboundGroupSession(withId: sessionId, andSenderKey: senderKey) != nil
-    }
-    
-    private func decryptEvent(_ event: MXEvent) throws {
-        if !event.isEncrypted {
-            return
-        }
-        
-        guard let senderKey = event.content["sender_key"] as? String,
-            let algorithm = event.content["algorithm"] as? String else {
-                throw MXBackgroundSyncServiceError.unknown
-        }
-        
-        guard let decryptorClass = MXCryptoAlgorithms.shared()?.decryptorClass(forAlgorithm: algorithm) else {
-            throw MXBackgroundSyncServiceError.unknownAlgorithm
-        }
-        
-        if decryptorClass == MXMegolmDecryption.self {
-            guard let ciphertext = event.content["ciphertext"] as? String,
-                let sessionId = event.content["session_id"] as? String else {
-                    throw MXBackgroundSyncServiceError.unknown
-            }
-            
-            let olmResult = try olmDevice.decryptGroupMessage(ciphertext, roomId: event.roomId, inTimeline: nil, sessionId: sessionId, senderKey: senderKey)
-            
-            let decryptionResult = MXEventDecryptionResult()
-            decryptionResult.clearEvent = olmResult.payload
-            decryptionResult.senderCurve25519Key = olmResult.senderKey
-            decryptionResult.claimedEd25519Key = olmResult.keysClaimed["ed25519"] as? String
-            decryptionResult.forwardingCurve25519KeyChain = olmResult.forwardingCurve25519KeyChain
-            event.setClearData(decryptionResult)
-        } else if decryptorClass == MXOlmDecryption.self {
-            guard let ciphertextDict = event.content["ciphertext"] as? [AnyHashable: Any],
-                let deviceCurve25519Key = olmDevice.deviceCurve25519Key,
-                let message = ciphertextDict[deviceCurve25519Key] as? [AnyHashable: Any],
-                let payloadString = decryptMessageWithOlm(message: message, theirDeviceIdentityKey: senderKey) else {
-                    throw MXBackgroundSyncServiceError.decryptionFailure
-            }
-            guard let payloadData = payloadString.data(using: .utf8),
-                let payload = try? JSONSerialization.jsonObject(with: payloadData,
-                                                                  options: .init(rawValue: 0)) as? [AnyHashable: Any],
-                let recipient = payload["recipient"] as? String,
-                recipient == credentials.userId,
-                let recipientKeys = payload["recipient_keys"] as? [AnyHashable: Any],
-                let ed25519 = recipientKeys["ed25519"] as? String,
-                ed25519 == olmDevice.deviceEd25519Key,
-                let sender = payload["sender"] as? String,
-                sender == event.sender else {
-                    throw MXBackgroundSyncServiceError.decryptionFailure
-            }
-            if let roomId = event.roomId {
-                guard payload["room_id"] as? String == roomId else {
-                    throw MXBackgroundSyncServiceError.decryptionFailure
-                }
-            }
-            
-            let claimedKeys = payload["keys"] as? [AnyHashable: Any]
-            let decryptionResult = MXEventDecryptionResult()
-            decryptionResult.clearEvent = payload
-            decryptionResult.senderCurve25519Key = senderKey
-            decryptionResult.claimedEd25519Key = claimedKeys?["ed25519"] as? String
-            event.setClearData(decryptionResult)
-        } else {
-            throw MXBackgroundSyncServiceError.unknownAlgorithm
-        }
-    }
-    
-    private func decryptMessageWithOlm(message: [AnyHashable: Any], theirDeviceIdentityKey: String) -> String? {
-        let sessionIds = olmDevice.sessionIds(forDevice: theirDeviceIdentityKey)
-        let messageBody = message["body"] as? String
-        let messageType = message["type"] as? UInt ?? 0
-        
-        for sessionId in sessionIds ?? [] {
-            if let payload = olmDevice.decryptMessage(messageBody,
-                                                      withType: messageType,
-                                                      sessionId: sessionId,
-                                                      theirDeviceIdentityKey: theirDeviceIdentityKey) {
-                return payload
-            } else {
-                let foundSession = olmDevice.matchesSession(theirDeviceIdentityKey,
-                                                            sessionId: sessionId,
-                                                            messageType: messageType,
-                                                            ciphertext: messageBody)
-                if foundSession {
-                    return nil
-                }
-            }
-        }
-        
-        if messageType != 0 {
-            return nil
-        }
-        
-        var payload: NSString?
-        guard let _ = olmDevice.createInboundSession(theirDeviceIdentityKey,
-                                                     messageType: messageType,
-                                                     cipherText: messageBody,
-                                                     payload: &payload) else {
-                                                        return nil
-        }
-        return payload as String?
-    }
-    
-    private func handleSyncResponse(_ syncResponse: MXSyncResponse, syncToken: String) {
+    private func handleSyncResponse(_ syncResponse: MXSyncResponse, syncToken: String) async {
         MXLog.debug("""
             [MXBackgroundSyncService] handleSyncResponse: \
             Received \(syncResponse.rooms?.join?.count ?? 0) joined rooms, \
@@ -501,9 +432,7 @@ public enum MXBackgroundSyncServiceError: Error {
         }
         syncResponseStoreManager.updateStore(with: syncResponse, syncToken: syncToken)
         
-        for event in syncResponse.toDevice?.events ?? [] {
-            handleToDeviceEvent(event)
-        }
+        await crypto.handleSyncResponse(syncResponse)
         
         if MXSDKOptions.sharedInstance().autoAcceptRoomInvites,
            let invitedRooms = syncResponse.rooms?.invite {
@@ -514,78 +443,16 @@ public enum MXBackgroundSyncServiceError: Error {
                     case .success:
                         MXLog.debug("[MXBackgroundSyncService] handleSyncResponse: Joined room: \(roomId)")
                     case .failure(let error):
-                        MXLog.error("[MXBackgroundSyncService] handleSyncResponse: Failed to join room: \(roomId), error: \(error)")
+                        MXLog.error("[MXBackgroundSyncService] handleSyncResponse: Failed to join room", context: [
+                            "error": error,
+                            "room_id": roomId
+                        ])
                     }
                 }
             }
         }
         
         MXLog.debug("[MXBackgroundSyncService] handleSyncResponse: Next sync token: \(syncResponse.nextBatch)")
-    }
-    
-    private func handleToDeviceEvent(_ event: MXEvent) {
-        if event.isEncrypted {
-            do {
-                try decryptEvent(event)
-            } catch let error {
-                MXLog.debug("[MXBackgroundSyncService] handleToDeviceEvent: Could not decrypt to-device event: \(error)")
-                return
-            }
-        }
-        
-        guard let content = event.content else {
-            MXLog.debug("[MXBackgroundSyncService] handleToDeviceEvent: ERROR: incomplete event content: \(String(describing: event.jsonDictionary()))")
-            return
-        }
-        
-        guard let roomId = content["room_id"] as? String,
-            let sessionId = content["session_id"] as? String,
-            let sessionKey = content["session_key"] as? String,
-            var senderKey = event.senderKey else {
-            MXLog.debug("[MXBackgroundSyncService] handleToDeviceEvent: ERROR: incomplete event: \(String(describing: event.jsonDictionary()))")
-            return
-        }
-        
-        var forwardingKeyChain: [String] = []
-        var exportFormat: Bool = false
-        var keysClaimed: [String: String] = [:]
-        
-        switch event.eventType {
-        case .roomKey:
-            keysClaimed = event.keysClaimed as! [String: String]
-        case .roomForwardedKey:
-            exportFormat = true
-            
-            if let array = content["forwarding_curve25519_key_chain"] as? [String] {
-                forwardingKeyChain = array
-            }
-            forwardingKeyChain.append(senderKey)
-            
-            if let senderKeyInContent = content["sender_key"] as? String {
-                senderKey = senderKeyInContent
-            } else {
-                return
-            }
-            
-            guard let ed25519Key = event.content["sender_claimed_ed25519_key"] as? String else {
-                return
-            }
-            
-            keysClaimed = [
-                "ed25519": ed25519Key
-            ]
-        default:
-            MXLog.debug("[MXBackgroundSyncService] handleToDeviceEvent: ERROR: Not supported type: \(event.eventType)")
-            return
-        }
-        
-        olmDevice.addInboundGroupSession(sessionId,
-                                         sessionKey: sessionKey,
-                                         roomId: roomId,
-                                         senderKey: senderKey,
-                                         forwardingCurve25519KeyChain: forwardingKeyChain,
-                                         keysClaimed: keysClaimed,
-                                         exportFormat: exportFormat)
     }
     
     private func updateBackgroundServiceStoresIfNeeded() {
@@ -618,13 +485,14 @@ public enum MXBackgroundSyncServiceError: Error {
             }
         }
         
-        if syncResponseStoreManager.syncResponseStore.syncResponseIds.count == 0 {
-            // To avoid dead lock between processes, we write to the cryptoStore only from only one process.
-            // If there is no cached sync responses, it means they have been consumed by MXSession. Now is the
-            // right time to clean the cryptoStore.
-            MXLog.debug("[MXBackgroundSyncService] updateBackgroundServiceStoresIfNeeded: Reset MXBackgroundCryptoStore")
-            cryptoStore.reset()
-        }
+        syncPushRuleManagerWithAccountData()
     }
     
+    private func syncPushRuleManagerWithAccountData() {
+        if let accountData = syncResponseStoreManager.syncResponseStore.accountData {
+            pushRulesManager.handleAccountData(accountData)
+        } else if let accountData = store.userAccountData ?? nil {
+            pushRulesManager.handleAccountData(accountData)
+        }
+    }
 }

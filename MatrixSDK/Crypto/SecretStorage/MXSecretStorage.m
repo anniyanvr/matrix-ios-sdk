@@ -23,14 +23,14 @@
 #import "MXHkdfSha256.h"
 #import "MXAesHmacSha2.h"
 #import "MXBase64Tools.h"
-#import <OLMKit/OLMKit.h>
 #import "MXEncryptedSecretContent.h"
 
+#import <Security/Security.h>
 
 #pragma mark - Constants
 
 NSString *const MXSecretStorageErrorDomain = @"org.matrix.sdk.MXSecretStorage";
-static NSString* const kSecretStorageKeyIdFormat = @"m.secret_storage.key.%@";
+static NSString* const kSecretStorageKey = @"m.secret_storage.key";
 static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
 
@@ -73,6 +73,7 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
                                success:(void (^)(MXSecretStorageKeyCreationInfo *keyCreationInfo))success
                                failure:(void (^)(NSError *error))failure
 {
+    MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Creating new key");
     keyId = keyId ?: [[NSUUID UUID] UUIDString];
     
     MXHTTPOperation *operation = [MXHTTPOperation new];
@@ -88,6 +89,7 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
         if (error)
         {
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Failed to create a new key - %@", error);
                 failure(error);
             });
             return;
@@ -109,11 +111,13 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
             keyCreationInfo.recoveryKey = [MXRecoveryKey encode:privateKey];
             
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Successfully created a new key");
                 success(keyCreationInfo);
             });
             
         } failure:^(NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Failed to create a new key - %@", error);
                 failure(error);
             });
         }];
@@ -130,6 +134,7 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
                                success:(void (^)(MXSecretStorageKeyCreationInfo *keyCreationInfo))success
                                failure:(void (^)(NSError *error))failure
 {
+    MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Creating new key with passphrase");
     keyId = keyId ?: [[NSUUID UUID] UUIDString];
     
     MXHTTPOperation *operation = [MXHTTPOperation new];
@@ -162,14 +167,23 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
         }
         else
         {
-            OLMPkDecryption *decryption = [OLMPkDecryption new];
-            [decryption generateKey:&error];
-            privateKey = decryption.privateKey;
+            uint8_t randomBytes[32];
+            OSStatus status = SecRandomCopyBytes(kSecRandomDefault, sizeof(randomBytes), randomBytes);
+            
+            if (status == errSecSuccess)
+            {
+                privateKey = [NSData dataWithBytes:randomBytes length:sizeof(randomBytes)];
+            }
+            else
+            {
+                MXLogDebug(@"Failed to generate random bytes with error: %d", (int)status);
+            }
         }
         
         if (error)
         {
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Failed to create a new key - %@", error);
                 failure(error);
             });
             return;
@@ -180,6 +194,7 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
         if (error)
         {
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Failed to create a new key - %@", error);
                 failure(error);
             });
             return;
@@ -202,11 +217,13 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
             keyCreationInfo.recoveryKey = [MXRecoveryKey encode:privateKey];
             
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Successfully created a new key");
                 success(keyCreationInfo);
             });
             
         } failure:^(NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Failed to create a new key - %@", error);
                 failure(error);
             });
         }];
@@ -221,6 +238,7 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
                                success:(void (^)(void))success
                                failure:(void (^)(NSError *error))failure
 {
+    MXLogDebug(@"[MXSecretStorage] deleteKeyWithKeyId: Deleting an existing key");
     MXHTTPOperation *operation = [MXHTTPOperation new];
     
     if (!keyId)
@@ -253,11 +271,13 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
             }
             else
             {
+                MXLogDebug(@"[MXSecretStorage] deleteKeyWithKeyId: Successfully deleted a key");
                 success();
             }
             
         } failure:^(NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                MXLogDebug(@"[MXSecretStorage] createKeyWithKeyId: Failed to create a new key - %@", error);
                 failure(error);
             });
         }];
@@ -319,7 +339,8 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
                  @"key": keyId
                  };
     }
-    
+ 
+    MXLogDebug(@"[MXSecretStorage] setAsDefaultKeyWithKeyId: Changing the default SSSS key");
     return [self.mxSession setAccountData:data forType:kMXEventTypeStringSecretStorageDefaultKey
                                   success:success failure:failure];
 }
@@ -346,6 +367,22 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
     }
     
     return defaultKey;
+}
+
+- (NSInteger)numberOfValidKeys
+{
+    NSInteger count = 0;
+    NSDictionary *events = self.mxSession.accountData.allAccountDataEvents;
+    for (NSString *type in events)
+    {
+        // Previous keys are not deleted but nil-ed, so have to check non-empty content
+        // to determine valid key
+        if ([type containsString:kSecretStorageKey] && [events[type] count])
+        {
+            count++;
+        }
+    }
+    return count;
 }
 
 
@@ -585,7 +622,7 @@ static NSString* const kSecretStorageZeroString = @"\0\0\0\0\0\0\0\0\0\0\0\0\0\0
 
 - (NSString *)storageKeyIdForKey:(NSString*)key
 {
-    return [NSString stringWithFormat:kSecretStorageKeyIdFormat, key];
+    return [NSString stringWithFormat:@"%@.%@", kSecretStorageKey, key];
 }
 
 // Do accountData update on the main thread as expected by MXSession

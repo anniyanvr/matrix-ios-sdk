@@ -22,11 +22,13 @@
 #import "MatrixSDKTestsData.h"
 #import "MXRoomMember.h"
 #import "MXKey.h"
+#import "MXRoomAliasResolution.h"
 #import "MXThirdpartyProtocolsResponse.h"
 
 // Do not bother with retain cycles warnings in tests
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-retain-cycles"
+#pragma clang diagnostic ignored "-Wdeprecated"
 
 @interface MXRestClientTests : XCTestCase
 
@@ -46,9 +48,9 @@
 
 - (void)tearDown
 {
-    [super tearDown];
-
     _matrixSDKTestsData = nil;
+    
+    [super tearDown];
 }
 
 - (void)testInit
@@ -68,13 +70,13 @@
     // This test on sendTextMessage validates sendMessage and sendEvent too
     [self.matrixSDKTestsData doMXRestClientTestWithBobAndARoom:self readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation) {
 
-        [bobRestClient sendTextMessageToRoom:roomId text:@"This is text message" success:^(NSString *eventId) {
+        [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"This is text message" success:^(NSString *eventId) {
 
             XCTAssertNotNil(eventId);
 
             [bobRestClient close];
 
-            MXHTTPOperation *operation = [bobRestClient sendTextMessageToRoom:roomId text:@"This is text message" success:^(NSString *eventId) {
+            MXHTTPOperation *operation = [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"This is text message" success:^(NSString *eventId) {
 
                 XCTFail(@"The request should have not been sent");
                 [expectation fulfill];
@@ -103,7 +105,7 @@
     // This test on sendTextMessage validates sendMessage and sendEvent too
     [self.matrixSDKTestsData doMXRestClientTestWithBobAndARoom:self readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation) {
         
-        [bobRestClient sendTextMessageToRoom:roomId text:@"This is text message" success:^(NSString *eventId) {
+        [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"This is text message" success:^(NSString *eventId) {
             
             XCTAssertNotNil(eventId);
             XCTAssertGreaterThan(eventId.length, 0, @"The eventId string must not be empty");
@@ -245,6 +247,62 @@
     }];
 }
 
+- (void)testRoomEnhancedJoinRule
+{
+    [self.matrixSDKTestsData doMXRestClientTestWithBobAndARoom:self readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation) {
+        
+        NSString *parentId = [NSString stringWithFormat:@"!%@%@", [NSUUID new].UUIDString, bobRestClient.homeserverSuffix];
+
+        __block MXRestClient *bobRestClient2 = bobRestClient;
+        [bobRestClient setRoomJoinRule:kMXRoomJoinRuleRestricted forRoomWithId:roomId allowedParentIds:@[parentId] success:^{
+            
+            [bobRestClient2 joinRuleOfRoomWithId:roomId success:^(MXRoomJoinRuleResponse *response) {
+                XCTAssertNotNil(response.joinRule);
+                XCTAssertNotEqual(response.joinRule.length, 0);
+                XCTAssertEqualObjects(response.joinRule, kMXRoomJoinRuleRestricted, @"Room join rule is wrong");
+                
+                XCTAssertNotNil(response.allowedParentIds);
+                XCTAssertEqual(response.allowedParentIds.count, 1);
+                XCTAssertEqualObjects(response.allowedParentIds.firstObject, parentId, @"Room allowed parent ID");
+                
+                [bobRestClient setRoomJoinRule:kMXRoomJoinRulePublic forRoomWithId:roomId allowedParentIds:nil success:^{
+
+                    [bobRestClient2 joinRuleOfRoomWithId:roomId success:^(MXRoomJoinRuleResponse *response) {
+
+                        XCTAssertNotNil(response.joinRule);
+                        XCTAssertNotEqual(response.joinRule.length, 0);
+                        XCTAssertEqualObjects(response.joinRule, kMXRoomJoinRulePublic, @"Room join rule is wrong");
+                        
+                        XCTAssertNotNil(response.allowedParentIds);
+                        XCTAssertEqual(response.allowedParentIds.count, 0);
+
+                        [expectation fulfill];
+
+                    } failure:^(NSError *error) {
+                        XCTFail(@"The request should not fail - NSError: %@", error);
+                        [expectation fulfill];
+                    }];
+
+                } failure:^(NSError *error) {
+                    XCTFail(@"The request should not fail - NSError: %@", error);
+                    [expectation fulfill];
+                }];
+
+
+                [expectation fulfill];
+            } failure:^(NSError *error) {
+                XCTFail(@"The request should not fail - NSError: %@", error);
+                [expectation fulfill];
+            }];
+            
+        } failure:^(NSError *error) {
+            XCTFail(@"The request should not fail - NSError: %@", error);
+            [expectation fulfill];
+        }];
+        
+    }];
+}
+
 - (void)testRoomGuestAccess
 {
     [self.matrixSDKTestsData doMXRestClientTestWithBobAndARoom:self readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation) {
@@ -321,11 +379,13 @@
             // Test with a valid alias
             [bobRestClient2 addRoomAlias:roomId alias:correctAlias success:^{
                 
-                [bobRestClient2 roomIDForRoomAlias:correctAlias success:^(NSString *roomId2) {
+                [bobRestClient2 resolveRoomAlias:correctAlias success:^(MXRoomAliasResolution *resolution) {
                     
-                    XCTAssertNotNil(roomId2);
-                    XCTAssertNotEqual(roomId2.length, 0);
-                    XCTAssertEqualObjects(roomId2, roomId, @"Mapping from room alias to room ID is wrong");
+                    XCTAssertNotNil(resolution);
+                    XCTAssertNotEqual(resolution.roomId.length, 0);
+                    XCTAssertEqualObjects(resolution.roomId, roomId, @"Mapping from room alias to room ID is wrong");
+                    XCTAssertNotEqual(resolution.servers.count, 0);
+                    XCTAssertNotEqual(resolution.servers[0].length, 0);
                     
                     // Test with a valid alias which already exists
                     [bobRestClient2 addRoomAlias:roomId alias:correctAlias success:^{
@@ -371,7 +431,7 @@
             [bobRestClient2 removeRoomAlias:roomAlias success:^{
                 
                 // Check whether it has been removed correctly
-                [bobRestClient2 roomIDForRoomAlias:roomAlias success:^(NSString *roomId2) {
+                [bobRestClient2 resolveRoomAlias:roomAlias success:^(MXRoomAliasResolution *resolution) {
                     
                     XCTFail(@"The request should not succeed");
                     [expectation fulfill];
@@ -763,16 +823,13 @@
 {
     [self.matrixSDKTestsData doMXRestClientTestWithBobAndARoomWithMessages:self readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation) {
         
-        [bobRestClient stateOfRoom:roomId success:^(NSDictionary *JSONData) {
+        [bobRestClient stateOfRoom:roomId success:^(NSArray *JSONData) {
             
             XCTAssertNotNil(JSONData);
-            
-            XCTAssert([JSONData isKindOfClass:[NSArray class]]);
-            NSArray *states = (NSArray*)JSONData;
-            XCTAssertGreaterThan(states.count, 0);
+            XCTAssertGreaterThan(JSONData.count, 0);
             
             // Check that all provided events are state events
-            for (NSDictionary *eventDict in states)
+            for (NSDictionary *eventDict in JSONData)
             {
                 MXEvent *event = [MXEvent modelFromJSON:eventDict];
                 
@@ -815,7 +872,7 @@
 {
     [self.matrixSDKTestsData doMXRestClientTestWithBobAndARoom:self readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation) {
 
-        [bobRestClient sendTextMessageToRoom:roomId text:@"This is text message" success:^(NSString *eventId) {
+        [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"This is text message" success:^(NSString *eventId) {
 
             [bobRestClient redactEvent:eventId inRoom:roomId reason:@"No reason" success:^{
 
@@ -875,7 +932,7 @@
 
         NSString *message = @"This is text message";
 
-        [bobRestClient sendTextMessageToRoom:roomId text:message success:^(NSString *eventId) {
+        [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:message success:^(NSString *eventId) {
 
             XCTAssertNotNil(eventId);
 
@@ -885,7 +942,7 @@
 
                 XCTAssertEqualObjects(event.eventId, eventId);
                 XCTAssertEqualObjects(event.type, kMXEventTypeStringRoomMessage);
-                XCTAssertEqualObjects(event.content[@"body"], message);
+                XCTAssertEqualObjects(event.content[kMXMessageBodyKey], message);
 
                 [expectation fulfill];
 
@@ -907,7 +964,7 @@
 
         NSString *message = @"This is text message";
 
-        [bobRestClient sendTextMessageToRoom:roomId text:message success:^(NSString *eventId) {
+        [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:message success:^(NSString *eventId) {
 
             XCTAssertNotNil(eventId);
 
@@ -917,7 +974,7 @@
 
                 XCTAssertEqualObjects(event.eventId, eventId);
                 XCTAssertEqualObjects(event.type, kMXEventTypeStringRoomMessage);
-                XCTAssertEqualObjects(event.content[@"body"], message);
+                XCTAssertEqualObjects(event.content[kMXMessageBodyKey], message);
 
                 [expectation fulfill];
 
@@ -1055,7 +1112,8 @@
 #pragma mark - Filter operations
 - (void)testFilter
 {
-    [self.matrixSDKTestsData doMXRestClientTestWithAlice:self readyToTest:^(MXRestClient *aliceRestClient, XCTestExpectation *expectation) {
+    [self.matrixSDKTestsData doMXRestClientTestWithBobAndAliceInARoom:self
+                                                          readyToTest:^(MXRestClient *bobRestClient, MXRestClient *aliceRestClient, NSString *roomId, XCTestExpectation *expectation) {
 
         MXFilterJSONModel *filter = [[MXFilterJSONModel alloc] init];
 
@@ -1063,15 +1121,13 @@
         filter.eventFormat = @"federation";
 
         filter.room = [[MXRoomFilter alloc] init];
-        filter.room.rooms = @[@"!aroom:matrix:org"];
-        filter.room.notRooms = @[@"!notaroom:matrix:org"];
+        filter.room.rooms = @[roomId];
 
         filter.room.ephemeral = [[MXRoomEventFilter alloc] init];
         filter.room.ephemeral.containsURL = NO;
         filter.room.ephemeral.types = @[@"atype"];
         filter.room.ephemeral.notTypes = @[@"notatype"];
-        filter.room.ephemeral.rooms = @[@"!aroom_ephemeral:matrix:org"];
-        filter.room.ephemeral.notRooms = @[@"!notaroom_ephemeral:matrix:org"];
+        filter.room.ephemeral.rooms = @[roomId];;
         filter.room.ephemeral.senders = @[@"@asender:matrix.org"];
         filter.room.ephemeral.notSenders = @[@"@notasender:matrix.org"];
 
@@ -1170,25 +1226,6 @@
         }];
     }];
 }
-
-// Disabled as it seems that the registration method we use in tests now uses the
-// local part of the user id as the default displayname
-//- (void)testUserNilDisplayName
-//{
-//    [self.matrixSDKTestsData doMXRestClientTestWithBob:self readyToTest:^(MXRestClient *bobRestClient, XCTestExpectation *expectation) {
-//
-//        [bobRestClient displayNameForUser:nil success:^(NSString *displayname) {
-//
-//            XCTAssertNil(displayname, @"mxBob has no displayname defined");
-//            [expectation fulfill];
-//
-//        } failure:^(NSError *error) {
-//            XCTFail(@"The request should not fail - NSError: %@", error);
-//            [expectation fulfill];
-//        }];
-//
-//    }];
-//}
 
 - (void)testUserAvatarUrl
 {
@@ -1295,42 +1332,7 @@
             // Check data sent by the home server has been correcltly modelled
             XCTAssertTrue([pushRules.global isKindOfClass:[MXPushRulesSet class]]);
 
-            XCTAssertNotNil(pushRules.global.content);
-            XCTAssertTrue([pushRules.global.content isKindOfClass:[NSArray class]]);
-
-            MXPushRule *pushRule = pushRules.global.content[0];
-            XCTAssertTrue([pushRule isKindOfClass:[MXPushRule class]]);
-
-            XCTAssertNotNil(pushRule.actions);
-
-            MXPushRuleAction *pushAction = pushRule.actions[0];
-            XCTAssertTrue([pushAction isKindOfClass:[MXPushRuleAction class]]);
-
-            // Test a rule with room_member_count condition. There must be one for 1:1 in underride rules
-            MXPushRule *roomMemberCountRule;
-            for (MXPushRule *pushRule in pushRules.global.underride)
-            {
-                if (pushRule.conditions.count)
-                {
-                    MXPushRuleCondition *condition = pushRule.conditions[0];
-                    if (condition.kindType == MXPushRuleConditionTypeRoomMemberCount)
-                    {
-                        roomMemberCountRule = pushRule;
-                        break;
-                    }
-                }
-            }
-            XCTAssertNotNil(roomMemberCountRule);
-
-            MXPushRuleCondition *condition = roomMemberCountRule.conditions[0];
-            XCTAssertNotNil(condition);
-            XCTAssertEqualObjects(condition.kind, kMXPushRuleConditionStringRoomMemberCount);
-
-            XCTAssertEqual(condition.kindType, MXPushRuleConditionTypeRoomMemberCount);
-
-            XCTAssertNotNil(condition.parameters);
-            NSNumber *number= condition.parameters[@"is"];
-            XCTAssertEqual(number.intValue, 2);
+            // TODO: Check new default push rules
 
             [expectation fulfill];
 
@@ -1415,7 +1417,7 @@
                                                        }];
         }];
 
-        [room sendTextMessage:message success:^(NSString *eventId) {
+        [room sendTextMessage:message threadId:nil success:^(NSString *eventId) {
             messageEventId = eventId;
         } failure:nil];
     }];

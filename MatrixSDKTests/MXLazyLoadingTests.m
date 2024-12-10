@@ -21,6 +21,7 @@
 
 #import "MXHTTPClient_Private.h"
 #import "MXFileStore.h"
+#import "MatrixSDKTestsSwiftHeader.h"
 
 // Do not bother with retain cycles warnings in tests
 #pragma clang diagnostic push
@@ -49,10 +50,10 @@ NSString * const bobMessage = @"I am Bob";
 
 - (void)tearDown
 {
-    [super tearDown];
     [MXHTTPClient removeAllDelays];
-
     matrixSDKTestsData = nil;
+    
+    [super tearDown];
 }
 
 /**
@@ -101,7 +102,7 @@ Common initial conditions:
                         [matrixSDKTestsData for:aliceRestClient andRoom:roomId sendMessages:50 testCase:self success:^{
 
                             // - Bob sends a message
-                            [roomFromBobPOV sendTextMessage:bobMessage success:^(NSString *eventId) {
+                            [roomFromBobPOV sendTextMessage:bobMessage threadId:nil success:^(NSString *eventId) {
 
                                 bobMessageEventId = eventId;
 
@@ -301,11 +302,11 @@ Common initial conditions:
 
         MXRoom *room = [aliceSession roomWithRoomId:roomId];
 
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
 
             [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
-                XCTAssertEqualObjects(event.content[@"body"], messageFromCharlie);
+                XCTAssertEqualObjects(event.content[kMXMessageBodyKey], messageFromCharlie);
 
                 XCTAssert([roomState.members memberWithUserId:aliceSession.myUser.userId]);
                 XCTAssert([roomState.members memberWithUserId:charlieSession.myUser.userId]);
@@ -332,7 +333,7 @@ Common initial conditions:
             }];
 
             MXRoom *roomFromCharliePOV = [charlieSession roomWithRoomId:roomId];
-            [roomFromCharliePOV sendTextMessage:messageFromCharlie success:nil failure:^(NSError *error) {
+            [roomFromCharliePOV sendTextMessage:messageFromCharlie threadId:nil success:nil failure:^(NSError *error) {
                 XCTFail(@"The operation should not fail - NSError: %@", error);
                 [expectation fulfill];
             }];
@@ -359,7 +360,7 @@ Common initial conditions:
 
         MXRoom *room = [aliceSession roomWithRoomId:roomId];
 
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
 
             __block NSUInteger messageCount = 0;
             [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
@@ -518,7 +519,7 @@ Common initial conditions:
     [self createScenarioWithLazyLoading:lazyLoading readyToTest:^(MXSession *aliceSession, MXSession *bobSession, MXSession *charlieSession, NSString *roomId, XCTestExpectation *expectation) {
 
         MXRoom *room = [aliceSession roomWithRoomId:roomId];
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
 
             NSString *newBobName = @"NewBob";
 
@@ -893,7 +894,7 @@ Common initial conditions:
                 XCTAssertNotNil(room2);
                 XCTAssertNotNil(summary2);
 
-                [room2 liveTimeline:^(MXEventTimeline *liveTimeline) {
+                [room2 liveTimeline:^(id<MXEventTimeline> liveTimeline) {
 
                     // - Alice requests all members from the HS
                     // Force [MXRoom members:] to make a request
@@ -1040,8 +1041,8 @@ Common initial conditions:
 
             MXRoomSummary *roomSummary = [aliceSession roomSummaryWithRoomId:roomId];
 
-            XCTAssertTrue(roomSummary.displayname.length
-                              && ![roomSummary.displayname isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary.displayname);
+            XCTAssertTrue(roomSummary.displayName.length
+                              && ![roomSummary.displayName isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary.displayName);
 
             [expectation fulfill];
         }];
@@ -1078,8 +1079,8 @@ Common initial conditions:
 
                 // -> The room name should be "Bob & 2 others"
                 MXRoomSummary *roomSummary = [aliceSession roomSummaryWithRoomId:roomId];
-                XCTAssertTrue(roomSummary.displayname.length
-                              && ![roomSummary.displayname isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary.displayname);
+                XCTAssertTrue(roomSummary.displayName.length
+                              && ![roomSummary.displayName isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary.displayName);
 
 
                  // Make alice do an initial sync
@@ -1099,8 +1100,8 @@ Common initial conditions:
 
                         // -> The room name should be "Bob & 2 others"
                         MXRoomSummary *roomSummary2 = [aliceSession2 roomSummaryWithRoomId:roomId];
-                        XCTAssertTrue(roomSummary2.displayname.length
-                                      && ![roomSummary2.displayname isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary2.displayname);
+                        XCTAssertTrue(roomSummary2.displayName.length
+                                      && ![roomSummary2.displayName isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary2.displayName);
 
 
                         [expectation fulfill];
@@ -1144,10 +1145,10 @@ Common initial conditions:
     [self createDirectChatScenarioWithLazyLoading:lazyLoading readyToTest:^(MXSession *aliceSession, MXSession *bobSession, NSString *roomId, XCTestExpectation *expectation) {
 
         MXRoomSummary *roomSummary = [aliceSession roomSummaryWithRoomId:roomId];
-        XCTAssertTrue(roomSummary.displayname.length
-                      && ![roomSummary.displayname isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary.displayname);
+        XCTAssertTrue(roomSummary.displayName.length
+                      && ![roomSummary.displayName isEqualToString:@"Empty room"], @"Unexpected null room name: %@", roomSummary.displayName);
 
-        NSString *roomDisplayName = roomSummary.displayname;
+        NSString *roomDisplayName = roomSummary.displayName;
 
         [aliceSession pause];
 
@@ -1159,7 +1160,7 @@ Common initial conditions:
 
                 // -> The room name should be still the same
                 MXRoomSummary *roomSummary2 = [aliceSession roomSummaryWithRoomId:roomId];
-                XCTAssertEqualObjects(roomSummary2.displayname, roomDisplayName);
+                XCTAssertEqualObjects(roomSummary2.displayName, roomDisplayName);
 
                 [expectation fulfill];
             }];
@@ -1179,59 +1180,6 @@ Common initial conditions:
 }
 
 
-// Check encryption from a lazy loaded room state
-// - Alice sends a message from its lazy loaded room state where there is no Charlie
-// - Charlie must be able to decrypt it
-- (void)checkEncryptedMessageWithLazyLoading:(BOOL)lazyLoading
-{
-    [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = YES;
-    [self createScenarioWithLazyLoading:lazyLoading readyToTest:^(MXSession *aliceSession, MXSession *bobSession, MXSession *charlieSession, NSString *roomId, XCTestExpectation *expectation) {
-        [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
-
-        MXRoom *room = [aliceSession roomWithRoomId:roomId];
-        [room listenToEventsOfTypes:@[kMXEventTypeStringRoomEncryption] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
-
-            aliceSession.crypto.warnOnUnknowDevices = NO;
-
-            NSString *messageFromAlice = @"An encrypted message";
-
-            [charlieSession listenToEventsOfTypes:@[kMXEventTypeStringRoomMessage] onEvent:^(MXEvent *event, MXTimelineDirection direction, id customObject) {
-
-                XCTAssertTrue(event.isEncrypted);
-                XCTAssert(event.clearEvent);
-                XCTAssertEqualObjects(event.content[@"body"], messageFromAlice);
-
-                [expectation fulfill];
-            }];
-
-            MXRoomSummary *summary = [aliceSession roomSummaryWithRoomId:roomId];
-            XCTAssertTrue(summary.isEncrypted);
-
-            [room sendTextMessage:messageFromAlice success:nil failure:^(NSError *error) {
-                XCTFail(@"The operation should not fail - NSError: %@", error);
-                [expectation fulfill];
-            }];
-        }];
-
-        MXRoom *roomFromBobPOV = [bobSession roomWithRoomId:roomId];
-        [roomFromBobPOV enableEncryptionWithAlgorithm:kMXCryptoMegolmAlgorithm success:nil failure:^(NSError *error) {
-            XCTFail(@"The operation should not fail - NSError: %@", error);
-            [expectation fulfill];
-        }];
-    }];
-}
-
-- (void)testEncryptedMessage
-{
-    [self checkEncryptedMessageWithLazyLoading:YES];
-}
-
-- (void)testEncryptedMessageWithLazyLoadingOFF
-{
-    [self checkEncryptedMessageWithLazyLoading:NO];
-}
-
-
 // After the test scenario, create a temporary timeline on the last event.
 // The timeline state should be lazy loaded and partial.
 // There should be only Alice and state.members.count = 1
@@ -1242,7 +1190,7 @@ Common initial conditions:
         MXRoomSummary *summary = [aliceSession roomSummaryWithRoomId:roomId];
         MXRoom *room = [aliceSession roomWithRoomId:roomId];
 
-        MXEventTimeline *eventTimeline = [room timelineOnEvent:summary.lastMessage.eventId];
+        id<MXEventTimeline> eventTimeline = [room timelineOnEvent:summary.lastMessage.eventId];
 
         [eventTimeline resetPaginationAroundInitialEventWithLimit:10 success:^{
 
@@ -1300,7 +1248,7 @@ Common initial conditions:
         MXRoomSummary *summary = [aliceSession roomSummaryWithRoomId:roomId];
         MXRoom *room = [aliceSession roomWithRoomId:roomId];
 
-        MXEventTimeline *eventTimeline = [room timelineOnEvent:summary.lastMessage.eventId];
+        id<MXEventTimeline> eventTimeline = [room timelineOnEvent:summary.lastMessage.eventId];
 
         __block NSUInteger messageCount = 0;
         [eventTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
@@ -1427,7 +1375,7 @@ Common initial conditions:
 
         MXRoom *room = [aliceSession roomWithRoomId:roomId];
 
-        MXEventTimeline *eventTimeline = [room timelineOnEvent:bobMessageEventId];
+        id<MXEventTimeline> eventTimeline = [room timelineOnEvent:bobMessageEventId];
 
         __block NSUInteger messageCount = 0;
         [eventTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {

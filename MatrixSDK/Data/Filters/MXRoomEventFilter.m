@@ -20,6 +20,11 @@
 
 #import "MXJSONModel.h"
 
+//  TODO: Replace when the MSC merged
+//  https://github.com/matrix-org/matrix-doc/pull/3440
+NSString *const kMXRoomEventFilterKeyRelatedByTypes = @"related_by_rel_types";
+NSString *const kMXRoomEventFilterKeyRelatedBySenders = @"related_by_senders";
+
 @implementation MXRoomEventFilter
 
 - (void)setContainsURL:(BOOL)containsURL
@@ -138,6 +143,41 @@
     return lazyLoadMembers;
 }
 
+- (void)setUnreadThreadNotifications:(BOOL)unreadThreadNotifications
+{
+    dictionary[@"unread_thread_notifications"] = @(unreadThreadNotifications);
+}
+
+- (BOOL)unreadThreadNotifications
+{
+    BOOL unreadThreadNotifications = NO; // Basic default value used by homeservers
+    MXJSONModelSetBoolean(unreadThreadNotifications, dictionary[@"unread_thread_notifications"]);
+    return unreadThreadNotifications;
+}
+
+- (void)setRelatedByTypes:(NSArray<NSString *> *)relatedByTypes
+{
+    dictionary[kMXRoomEventFilterKeyRelatedByTypes] = relatedByTypes;
+}
+
+- (NSArray<NSString *> *)relatedByTypes
+{
+    NSArray<NSString *> *result;
+    MXJSONModelSetArray(result, dictionary[kMXRoomEventFilterKeyRelatedByTypes]);
+    return result;
+}
+
+- (void)setRelatedBySenders:(NSArray<NSString *> *)relatedBySenders
+{
+    dictionary[kMXRoomEventFilterKeyRelatedBySenders] = relatedBySenders;
+}
+
+- (NSArray<NSString *> *)relatedBySenders
+{
+    NSArray<NSString *> *result;
+    MXJSONModelSetArray(result, dictionary[kMXRoomEventFilterKeyRelatedBySenders]);
+    return result;
+}
 
 #pragma mark - NSCopying
 

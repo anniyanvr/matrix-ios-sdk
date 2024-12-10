@@ -49,7 +49,9 @@ extension MXSpaceService {
 public class MXSpaceService: NSObject {
 
     // MARK: - Properties
-    
+
+    private let spacesPerIdReadWriteQueue: DispatchQueue
+
     private unowned let session: MXSession
     
     private lazy var stateEventBuilder: MXRoomInitialStateEventBuilder = {
@@ -62,6 +64,13 @@ public class MXSpaceService: NSObject {
     private let sdkProcessingQueue: DispatchQueue
     private let completionQueue: DispatchQueue
     
+    private var spacesPerId: [String: MXSpace] = [:]
+    
+    private var isGraphBuilding = false;
+    private var isClosed = false;
+    
+    private var sessionStateDidChangeObserver: Any?
+
     private var graph: MXSpaceGraphData = MXSpaceGraphData() {
         didSet {
             var spacesPerId: [String:MXSpace] = [:]
@@ -70,31 +79,50 @@ public class MXSpaceService: NSObject {
                     spacesPerId[spaceId] = space
                 }
             }
-            self.spacesPerId = spacesPerId
+            spacesPerIdReadWriteQueue.sync(flags: .barrier) {
+                self.spacesPerId = spacesPerId
+            }
         }
     }
-    private var spacesPerId: [String:MXSpace] = [:]
     
-    private var isGraphBuilding = false;
-    
+    // MARK: Public
+
+    /// The instance of `MXSpaceNotificationCounter` that computes the number of unread messages for each space
     public let notificationCounter: MXSpaceNotificationCounter
     
+    /// List of `MXSpace` instances of the high level spaces.
+    public var rootSpaces: [MXSpace] {
+        return self.graph.rootSpaceIds.compactMap { spaceId in
+            self.getSpace(withId: spaceId)
+        }
+    }
+    
+    /// List of `MXRoomSummary` of the high level spaces.
     public var rootSpaceSummaries: [MXRoomSummary] {
         return self.graph.rootSpaceIds.compactMap { spaceId in
             self.session.roomSummary(withRoomId: spaceId)
         }
     }
     
+    /// List of `MXRoomSummary` of all spaces known by the user.
+    public var spaceSummaries: [MXRoomSummary] {
+        return self.graph.spaceRoomIds.compactMap { spaceId in
+            self.session.roomSummary(withRoomId: spaceId)
+        }
+    }
+
+    /// `true` if the `MXSpaceService` instance needs to be updated (e.g. the instance was busy while `handleSync` was called). `false` otherwise
     public private(set) var needsUpdate: Bool = true
     
+    /// Set it to `false` if you want to temporarily disable graph update. This will be set automatically to `true` after next sync of the `MXSession`.
     public var graphUpdateEnabled = true
     
-    private var sessionStateDidChangeObserver: Any?
-    
+    /// List of ID of all the ancestors (direct parent spaces and parent spaces of the direct parent spaces) by room ID.
     public var ancestorsPerRoomId: [String:Set<String>] {
         return graph.ancestorsPerRoomId
     }
     
+    /// The `MXSpaceService` instance is initialised if a previously saved graph has been restored or after the first sync.
     public private(set) var isInitialised = false {
         didSet {
             if !oldValue && isInitialised {
@@ -114,7 +142,11 @@ public class MXSpaceService: NSObject {
         self.processingQueue = DispatchQueue(label: "org.matrix.sdk.MXSpaceService.processingQueue", attributes: .concurrent)
         self.completionQueue = DispatchQueue.main
         self.sdkProcessingQueue = DispatchQueue.main
-        
+        self.spacesPerIdReadWriteQueue = DispatchQueue(
+          label: "org.matrix.sdk.MXSpaceService.spacesPerIdReadWriteQueue",
+          attributes: .concurrent
+        )
+
         super.init()
         
         self.registerNotificationObservers()
@@ -128,10 +160,9 @@ public class MXSpaceService: NSObject {
     
     /// close the service and free all data
     public func close() {
-        self.isGraphBuilding = true
+        self.isClosed = true
         self.graph = MXSpaceGraphData()
         self.notificationCounter.close()
-        self.isGraphBuilding = false
         self.isInitialised = false
         self.completionQueue.async {
             NotificationCenter.default.post(name: MXSpaceService.didBuildSpaceGraph, object: self)
@@ -141,7 +172,21 @@ public class MXSpaceService: NSObject {
     /// Loads graph from the given store
     public func loadData() {
         self.processingQueue.async {
-            let store = MXSpaceFileStore(userId: self.session.myUserId, deviceId: self.session.myDeviceId)
+            var _myUserId: String?
+            var _myDeviceId: String?
+            
+            self.sdkProcessingQueue.sync {
+                _myUserId = self.session.myUserId
+                _myDeviceId = self.session.myDeviceId
+            }
+            
+            guard let myUserId = _myUserId, let myDeviceId = _myDeviceId else {
+                MXLog.error("[MXSpaceService] loadData: Unexpectedly found nil for myUserId and/or myDeviceId")
+                return
+            }
+            
+            let store = MXSpaceFileStore(userId: myUserId, deviceId: myDeviceId)
+            
             if let loadedGraph = store.loadSpaceGraphData() {
                 self.graph = loadedGraph
 
@@ -151,6 +196,28 @@ public class MXSpaceService: NSObject {
                     NotificationCenter.default.post(name: MXSpaceService.didBuildSpaceGraph, object: self)
                 }
             }
+        }
+    }
+    
+    /// Returns the set of direct parent IDs of the given room
+    /// - Parameters:
+    ///   - roomId: ID of the room
+    /// - Returns: set of direct parent IDs of the given room. Empty set if the room has no parent.
+    public func directParentIds(ofRoomWithId roomId: String) -> Set<String> {
+        return graph.parentIdsPerRoomId[roomId] ?? Set()
+    }
+    
+    /// Returns the set of direct parent IDs of the given room for which the room is suggested or not according to the request.
+    /// - Parameters:
+    ///   - roomId: ID of the room
+    ///   - suggested: If `true` the method will return the parent IDs where the room is suggested. If `false`  the method will return the parent IDs where the room is NOT suggested
+    /// - Returns: set of direct parent IDs of the given room. Empty set if the room has no parent.
+    public func directParentIds(ofRoomWithId roomId: String, whereRoomIsSuggested suggested: Bool) -> Set<String> {
+        return directParentIds(ofRoomWithId: roomId).filter { spaceId in
+            guard let space = spacesPerId[spaceId] else {
+                return false
+            }
+            return (suggested && space.suggestedRoomIds.contains(roomId)) || (!suggested && !space.suggestedRoomIds.contains(roomId))
         }
     }
     
@@ -171,13 +238,26 @@ public class MXSpaceService: NSObject {
         return self.graph.orphanedRoomIds.contains(roomId) || self.graph.orphanedDirectRoomIds.contains(roomId)
     }
     
+    /// Returns the first ancestor which is a root space
+    /// - Parameters:
+    ///   - roomId: ID of the room
+    /// - Returns: Instance of the ancestor if found. `nil` otherwise
+    public func firstRootAncestorForRoom(withId roomId: String) -> MXSpace? {
+        if let ancestorIds = ancestorsPerRoomId[roomId] {
+            for ancestorId in ancestorIds where ancestorsPerRoomId[ancestorId] == nil {
+                return spacesPerId[ancestorId]
+            }
+        }
+        
+        return nil
+    }
+    
     /// Handle a sync response
     /// - Parameters:
     ///   - syncResponse: The sync response object
     public func handleSyncResponse(_ syncResponse: MXSyncResponse) {
-        guard self.needsUpdate || !(syncResponse.rooms?.join?.isEmpty ?? true) || !(syncResponse.rooms?.invite?.isEmpty ?? true) || !(syncResponse.rooms?.leave?.isEmpty ?? true) || !(syncResponse.toDevice?.events.isEmpty ?? true) else
-        {
-            return
+         guard self.needsUpdate || !(syncResponse.rooms?.join?.isEmpty ?? true) || !(syncResponse.rooms?.invite?.isEmpty ?? true) || !(syncResponse.rooms?.leave?.isEmpty ?? true) || !(syncResponse.toDevice?.events.isEmpty ?? true) else {
+             return
         }
         
         self.buildGraph()
@@ -210,24 +290,31 @@ public class MXSpaceService: NSObject {
     ///   - name: The space name.
     ///   - topic: The space topic.
     ///   - isPublic: true to indicate to use public chat presets and join the space without invite or false to use private chat presets and join the space on invite.
+    ///   - aliasLocalPart: local part of the alias
+    ///   (e.g. for the alias "#my_alias:example.org", the local part is "my_alias")
+    ///   - inviteArray: list of invited user IDs
     ///   - completion: A closure called when the operation completes.
     /// - Returns: a `MXHTTPOperation` instance.
     @discardableResult
-    public func createSpace(withName name: String, topic: String?, isPublic: Bool, completion: @escaping (MXResponse<MXSpace>) -> Void) -> MXHTTPOperation {
+    public func createSpace(withName name: String?, topic: String?, isPublic: Bool, aliasLocalPart: String? = nil, inviteArray: [String]? = nil, completion: @escaping (MXResponse<MXSpace>) -> Void) -> MXHTTPOperation {
+        
         let parameters = MXSpaceCreationParameters()
         parameters.name = name
         parameters.topic = topic
         parameters.preset = isPublic ? kMXRoomPresetPublicChat : kMXRoomPresetPrivateChat
-        
+        parameters.visibility = isPublic ? kMXRoomDirectoryVisibilityPublic : kMXRoomDirectoryVisibilityPrivate
+        parameters.inviteArray = inviteArray
         if isPublic {
+            parameters.roomAlias = aliasLocalPart
             let guestAccessStateEvent = self.stateEventBuilder.buildGuestAccessEvent(withAccess: .canJoin)
-                                    
-            let historyVisibilityStateEvent = self.stateEventBuilder.buildHistoryVisibilityEvent(withVisibility: .worldReadable)
-            
             parameters.addOrUpdateInitialStateEvent(guestAccessStateEvent)
+            let historyVisibilityStateEvent = self.stateEventBuilder.buildHistoryVisibilityEvent(withVisibility: .worldReadable)
             parameters.addOrUpdateInitialStateEvent(historyVisibilityStateEvent)
+            parameters.powerLevelContentOverride?.invite = 0 // default
+        } else {
+            parameters.powerLevelContentOverride?.invite = 50 // moderator
         }
-        
+
         return self.createSpace(with: parameters, completion: completion)
     }
     
@@ -235,10 +322,15 @@ public class MXSpaceService: NSObject {
     /// - Parameter spaceId: The id of the space.
     /// - Returns: A MXSpace with the associated roomId or null if room doesn't exists or the room type is not space.
     public func getSpace(withId spaceId: String) -> MXSpace? {
-        var space = self.spacesPerId[spaceId]
+        var space: MXSpace?
+        spacesPerIdReadWriteQueue.sync {
+           space = self.spacesPerId[spaceId]
+        }
         if space == nil, let newSpace = self.session.room(withRoomId: spaceId)?.toSpace() {
             space = newSpace
-            self.spacesPerId[spaceId] = newSpace
+            spacesPerIdReadWriteQueue.sync(flags: .barrier) {
+                self.spacesPerId[spaceId] = newSpace
+            }
         }
         return space
     }
@@ -248,14 +340,18 @@ public class MXSpaceService: NSObject {
     ///   - spaceId: The room id of the queried space.
     ///   - suggestedOnly: If `true`, return only child events and rooms where the `m.space.child` event has `suggested: true`.
     ///   - limit: Optional. A limit to the maximum number of children to return per space. `-1` for no limit
+    ///   - maxDepth: Optional. The maximum depth in the tree (from the root room) to return. `-1` for no limit
+    ///   - paginationToken: Optional. Pagination token given to retrieve the next set of rooms.
     ///   - completion: A closure called when the operation completes.
     /// - Returns: a `MXHTTPOperation` instance.
     @discardableResult
     public func getSpaceChildrenForSpace(withId spaceId: String,
                                          suggestedOnly: Bool,
                                          limit: Int?,
+                                         maxDepth: Int?,
+                                         paginationToken: String?,
                                          completion: @escaping (MXResponse<MXSpaceChildrenSummary>) -> Void) -> MXHTTPOperation {
-        return self.session.matrixRestClient.getSpaceChildrenForSpace(withId: spaceId, suggestedOnly: suggestedOnly, limit: limit) { (response) in
+        return self.session.matrixRestClient.getSpaceChildrenForSpace(withId: spaceId, suggestedOnly: suggestedOnly, limit: limit, maxDepth: maxDepth, paginationToken: paginationToken) { (response) in
             switch response {
             case .success(let spaceChildrenResponse):
                 self.processingQueue.async { [weak self] in
@@ -271,39 +367,33 @@ public class MXSpaceService: NSObject {
                         return
                     }
 
-                    guard let rootSpaceChildSummaryResponse = rooms.first(where: { spaceResponse -> Bool in
-                        return spaceResponse.roomId == spaceId
-                    }) else {
-                        // Fail to find root child. We should have at least one room for the requested space
-                        self.completionQueue.async {
-                            completion(.failure(MXSpaceServiceError.spaceNotFound))
-                        }
-                        return
-                    }
-
-                    // Build the queried space summary
-                    let spaceSummary = self.createRoomSummary(with: rootSpaceChildSummaryResponse)
-                    
                     // Build room hierarchy and events
                     var childrenIdsPerChildRoomId: [String: [String]] = [:]
                     var parentIdsPerChildRoomId: [String:Set<String>] = [:]
                     var spaceChildEventsPerChildRoomId: [String:[String:Any]] = [:]
-                    for event in spaceChildrenResponse.events ?? [] where event.type == kMXEventTypeStringSpaceChild && event.wireContent.count > 0 {
-                        spaceChildEventsPerChildRoomId[event.stateKey] = event.wireContent
+                    for room in spaceChildrenResponse.rooms ?? [] {
+                        for event in room.childrenState ?? [] where event.wireContent.count > 0 {
+                            spaceChildEventsPerChildRoomId[event.stateKey] = event.wireContent
 
-                        var parentIds = parentIdsPerChildRoomId[event.stateKey] ?? Set()
-                        parentIds.insert(event.roomId)
-                        parentIdsPerChildRoomId[event.stateKey] = parentIds
+                            var parentIds = parentIdsPerChildRoomId[event.stateKey] ?? Set()
+                            parentIds.insert(room.roomId)
+                            parentIdsPerChildRoomId[event.stateKey] = parentIds
 
-                        var childrenIds = childrenIdsPerChildRoomId[event.roomId] ?? []
-                        childrenIds.append(event.stateKey)
-                        childrenIdsPerChildRoomId[event.roomId] = childrenIds
+                            var childrenIds = childrenIdsPerChildRoomId[room.roomId] ?? []
+                            childrenIds.append(event.stateKey)
+                            childrenIdsPerChildRoomId[room.roomId] = childrenIds
+                        }
+                    }
+                    
+                    var spaceInfo: MXSpaceChildInfo?
+                    if let rootSpaceChildSummaryResponse = rooms.first(where: { spaceResponse -> Bool in spaceResponse.roomId == spaceId}) {
+                        spaceInfo = self.createSpaceChildInfo(with: rootSpaceChildSummaryResponse, childrenIds: childrenIdsPerChildRoomId[spaceId], childEvents: spaceChildEventsPerChildRoomId[spaceId])
                     }
                     
                     // Build the child summaries of the queried space
                     let childInfos = self.spaceChildInfos(from: spaceChildrenResponse, excludedSpaceId: spaceId, childrenIdsPerChildRoomId: childrenIdsPerChildRoomId, parentIdsPerChildRoomId: parentIdsPerChildRoomId, spaceChildEventsPerChildRoomId: spaceChildEventsPerChildRoomId)
 
-                    let spaceChildrenSummary = MXSpaceChildrenSummary(spaceSummary: spaceSummary, childInfos: childInfos)
+                    let spaceChildrenSummary = MXSpaceChildrenSummary(spaceInfo: spaceInfo, childInfos: childInfos, nextBatch: spaceChildrenResponse.nextBatch)
 
                     self.completionQueue.async {
                         completion(.success(spaceChildrenSummary))
@@ -396,7 +486,7 @@ public class MXSpaceService: NSObject {
     
     /// Build the graph of rooms
     private func buildGraph() {
-        guard !self.isGraphBuilding && self.graphUpdateEnabled else {
+        guard !self.isClosed && !self.isGraphBuilding && self.graphUpdateEnabled else {
             MXLog.debug("[MXSpaceService] buildGraph: aborted: graph is building or disabled")
             self.needsUpdate = true
             return
@@ -408,20 +498,23 @@ public class MXSpaceService: NSObject {
         let startDate = Date()
         MXLog.debug("[MXSpaceService] buildGraph: started")
         
-        var directRoomIds = Set<String>()
-        let roomIds: [String] = self.session.rooms.compactMap { room in
-            if room.isDirect {
-                directRoomIds.insert(room.roomId)
-            }
-            return room.roomId
-        }
+        var directRoomIds = Set(session.directRooms?.flatMap(\.value) ?? [])
+        let roomIds = session.rooms.compactMap(\.roomId)
         
         let output = PrepareDataResult()
         MXLog.debug("[MXSpaceService] buildGraph: preparing data for \(roomIds.count) rooms")
         self.prepareData(with: roomIds, index: 0, output: output) { result in
+            guard !self.isClosed else {
+                return
+            }
+            
             MXLog.debug("[MXSpaceService] buildGraph: data prepared in \(Date().timeIntervalSince(startDate))")
             
             self.computSpaceGraph(with: result, roomIds: roomIds, directRoomIds: directRoomIds) { graph in
+                guard !self.isClosed else {
+                    return
+                }
+                
                 self.graph = graph
                 
                 MXLog.debug("[MXSpaceService] buildGraph: ended after \(Date().timeIntervalSince(startDate))s")
@@ -432,7 +525,20 @@ public class MXSpaceService: NSObject {
                 NotificationCenter.default.post(name: MXSpaceService.didBuildSpaceGraph, object: self)
 
                 self.processingQueue.async {
-                    let store = MXSpaceFileStore(userId: self.session.myUserId, deviceId: self.session.myDeviceId)
+                    var _myUserId: String?
+                    var _myDeviceId: String?
+                    
+                    self.sdkProcessingQueue.sync {
+                        _myUserId = self.session.myUserId
+                        _myDeviceId = self.session.myDeviceId
+                    }
+                    
+                    guard let myUserId = _myUserId, let myDeviceId = _myDeviceId else {
+                        MXLog.error("[MXSpaceService] buildGraph: Unexpectedly found nil for myUserId and/or myDeviceId")
+                        return
+                    }
+                    
+                    let store = MXSpaceFileStore(userId: myUserId, deviceId: myDeviceId)
                     if !store.store(spaceGraphData: self.graph) {
                         MXLog.error("[MXSpaceService] buildGraph: failed to store space graph")
                     }
@@ -445,6 +551,11 @@ public class MXSpaceService: NSObject {
     }
     
     private func prepareData(with roomIds:[String], index: Int, output: PrepareDataResult, completion: @escaping (_ result: PrepareDataResult) -> Void) {
+        guard !self.isClosed else {
+            // abort prepareData if the service is closed. No completion needed
+            return
+        }
+        
         self.processingQueue.async {
             guard index < roomIds.count else {
                 self.completionQueue.async {
@@ -461,8 +572,11 @@ public class MXSpaceService: NSObject {
                     self.prepareData(with: roomIds, index: index+1, output: output, completion: completion)
                     return
                 }
-                
-                let space = self.spacesPerId[room.roomId] ?? room.toSpace()
+
+                var space: MXSpace?
+                self.spacesPerIdReadWriteQueue.sync {
+                    space = self.spacesPerId[room.roomId] ?? room.toSpace()
+                }
                 
                 self.prepareData(with: roomIds, index: index, output: output, room: room, space: space, isRoomDirect: room.isDirect, directUserId: room.directUserId, completion: completion)
             }
@@ -471,12 +585,22 @@ public class MXSpaceService: NSObject {
     
     private func prepareData(with roomIds:[String], index: Int, output: PrepareDataResult, room: MXRoom, space _space: MXSpace?, isRoomDirect:Bool, directUserId _directUserId: String?, completion: @escaping (_ result: PrepareDataResult) -> Void) {
         
+        guard !self.isClosed else {
+            // abort prepareData if the service is closed. No completion needed
+            return
+        }
+        
         self.processingQueue.async {
             if let space = _space {
                 output.setComputing(true, forSpace: space)
                 space.readChildRoomsAndMembers {
                     output.setComputing(false, forSpace: space)
                     if !output.isPreparingData && !output.isComputing {
+                        guard !self.isClosed else {
+                            // abort prepareData if the service is closed. No completion needed
+                            return
+                        }
+                        
                         completion(output)
                     }
                 }
@@ -492,6 +616,11 @@ public class MXSpaceService: NSObject {
                         output.setComputing(true, forDirectRoom: room)
                         
                         room.members { response in
+                            guard !self.isClosed else {
+                                // abort prepareData if the service is closed. No completion needed
+                                return
+                            }
+                            
                             guard let members = response.value as? MXRoomMembers else {
                                 self.prepareData(with: roomIds, index: index+1, output: output, completion: completion)
                                 return
@@ -524,8 +653,7 @@ public class MXSpaceService: NSObject {
     
     private func computSpaceGraph(with result: PrepareDataResult, roomIds: [String], directRoomIds: Set<String>, completion: @escaping (_ graph: MXSpaceGraphData) -> Void) {
         let startDate = Date()
-        MXLog.debug("[MXSpaceService] computSpaceGraph: started")
-        
+        MXLog.debug("[MXSpaceService] computSpaceGraph: started for \(roomIds.count) rooms, \(directRoomIds.count) direct rooms, \(result.spaces.count) spaces, \(result.spaces.reduce(0, { $0 + $1.childSpaces.count })) child spaces, \(result.spaces.reduce(0, { $0 + $1.childRoomIds.count })) child rooms,  \(result.spaces.reduce(0, { $0 + $1.otherMembersId.count })) other members, \(result.directRoomIdsPerMemberId.count) members")
         self.processingQueue.async {
             var parentIdsPerRoomId: [String : Set<String>] = [:]
             result.spaces.forEach { space in
@@ -545,6 +673,21 @@ public class MXSpaceService: NSObject {
             
             let rootSpaces = result.spaces.filter { space in
                 return parentIdsPerRoomId[space.spaceId] == nil
+            }.sorted { space1, space2 in
+                let _space1Order = space1.order
+                let _space2Order = space2.order
+                
+                if let space1Order = _space1Order, let space2Order = _space2Order {
+                    return space1Order <= space2Order
+                }
+                
+                if _space1Order == nil && _space2Order == nil {
+                    return space1.spaceId <= space2.spaceId
+                } else if _space1Order != nil && _space2Order == nil {
+                    return true
+                } else {
+                    return false
+                }
             }
             
             var ancestorsPerRoomId: [String: Set<String>] = [:]
@@ -640,7 +783,7 @@ public class MXSpaceService: NSObject {
         membersCount.members = joinedMembersCount
         
         roomSummary.membersCount = membersCount
-        roomSummary.displayname = spaceChildSummaryResponse.name
+        roomSummary.displayName = spaceChildSummaryResponse.name
         roomSummary.topic = spaceChildSummaryResponse.topic
         roomSummary.avatar = spaceChildSummaryResponse.avatarUrl
         roomSummary.isEncrypted = false
@@ -661,23 +804,13 @@ public class MXSpaceService: NSObject {
                 return nil
             }
             
-            let childStateEvent = spaceChildrenResponse.events?.first(where: { (event) -> Bool in
-                return event.stateKey == spaceId && event.eventType == .spaceChild
-            })
-                        
-            return self.createSpaceChildInfo(with: spaceChildSummaryResponse, and: childStateEvent, parentIds: parentIdsPerChildRoomId[spaceId], childrenIds: childrenIdsPerChildRoomId[spaceId], childEvents: spaceChildEventsPerChildRoomId[spaceId])
+            return self.createSpaceChildInfo(with: spaceChildSummaryResponse, childrenIds: childrenIdsPerChildRoomId[spaceId], childEvents: spaceChildEventsPerChildRoomId[spaceId])
         }
         
         return childInfos
     }
     
-    private func createSpaceChildInfo(with spaceChildSummaryResponse: MXSpaceChildSummaryResponse, and spaceChildStateEvent: MXEvent?, parentIds: Set<String>?, childrenIds: [String]?, childEvents: [String:Any]?) -> MXSpaceChildInfo {
-        
-        var spaceChildContent: MXSpaceChildContent?
-        
-        if let stateEventContent = spaceChildStateEvent?.content {
-            spaceChildContent = MXSpaceChildContent(fromJSON: stateEventContent)
-        }
+    private func createSpaceChildInfo(with spaceChildSummaryResponse: MXSpaceChildSummaryResponse, childrenIds: [String]?, childEvents: [String:Any]?) -> MXSpaceChildInfo {
         
         let roomTypeString = spaceChildSummaryResponse.roomType
         let roomType = self.roomTypeMapper.roomType(from: roomTypeString)
@@ -690,14 +823,10 @@ public class MXSpaceService: NSObject {
                          topic: spaceChildSummaryResponse.topic,
                          canonicalAlias: spaceChildSummaryResponse.canonicalAlias,
                          avatarUrl: spaceChildSummaryResponse.avatarUrl,
-                         order: spaceChildContent?.order,
                          activeMemberCount: spaceChildSummaryResponse.numJoinedMembers,
                          autoJoin: childEvents?[kMXEventTypeStringAutoJoinKey] as? Bool ?? false,
                          suggested: childEvents?[kMXEventTypeStringSuggestedKey] as? Bool ?? false,
-                         parentIds: parentIds ?? Set(),
-                         childrenIds: childrenIds ?? [],
-                         viaServers: spaceChildContent?.via ?? [],
-                         parentRoomId: spaceChildStateEvent?.roomId)
+                         childrenIds: childrenIds ?? [])
     }
     
 }
@@ -722,12 +851,15 @@ extension MXSpaceService {
     ///   - name: The space name.
     ///   - topic: The space topic.
     ///   - isPublic: true to indicate to use public chat presets and join the space without invite or false to use private chat presets and join the space on invite.
+    ///   - aliasLocalPart: local part of the alias
+    ///   (e.g. for the alias "#my_alias:example.org", the local part is "my_alias")
+    ///   - inviteArray: list of invited user IDs
     ///   - success: A closure called when the operation is complete.
     ///   - failure: A closure called  when the operation fails.
     /// - Returns: a `MXHTTPOperation` instance.
     @discardableResult
-    @objc public func createSpace(withName name: String, topic: String?, isPublic: Bool, success: @escaping (MXSpace) -> Void, failure: @escaping (Error) -> Void) -> MXHTTPOperation {
-        return self.createSpace(withName: name, topic: topic, isPublic: isPublic) { (response) in
+    @objc public func createSpace(withName name: String, topic: String?, isPublic: Bool, aliasLocalPart: String?, inviteArray: [String]?, success: @escaping (MXSpace) -> Void, failure: @escaping (Error) -> Void) -> MXHTTPOperation {
+        return self.createSpace(withName: name, topic: topic, isPublic: isPublic, aliasLocalPart: aliasLocalPart, inviteArray: inviteArray) { (response) in
             uncurryResponse(response, success: success, failure: failure)
         }
     }
@@ -737,12 +869,14 @@ extension MXSpaceService {
     ///   - spaceId: The room id of the queried space.
     ///   - suggestedOnly: If `true`, return only child events and rooms where the `m.space.child` event has `suggested: true`.
     ///   - limit: Optional. A limit to the maximum number of children to return per space. `-1` for no limit
+    ///   - maxDepth: Optional. The maximum depth in the tree (from the root room) to return. `-1` for no limit
+    ///   - paginationToken: Optional. Pagination token given to retrieve the next set of rooms.
     ///   - success: A closure called when the operation is complete.
     ///   - failure: A closure called  when the operation fails.
     /// - Returns: a `MXHTTPOperation` instance.
     @discardableResult
-    @objc public func getSpaceChildrenForSpace(withId spaceId: String, suggestedOnly: Bool, limit: Int, success: @escaping (MXSpaceChildrenSummary) -> Void, failure: @escaping (Error) -> Void) -> MXHTTPOperation {
-        return self.getSpaceChildrenForSpace(withId: spaceId, suggestedOnly: suggestedOnly, limit: limit) { (response) in
+    @objc public func getSpaceChildrenForSpace(withId spaceId: String, suggestedOnly: Bool, limit: Int, maxDepth: Int, paginationToken: String?, success: @escaping (MXSpaceChildrenSummary) -> Void, failure: @escaping (Error) -> Void) -> MXHTTPOperation {
+        return self.getSpaceChildrenForSpace(withId: spaceId, suggestedOnly: suggestedOnly, limit: limit, maxDepth: maxDepth, paginationToken: paginationToken) { (response) in
             uncurryResponse(response, success: success, failure: failure)
         }
     }

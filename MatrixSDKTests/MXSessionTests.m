@@ -408,7 +408,7 @@
 
             MXRoom *room = [mxSession roomWithRoomId:roomId];
             XCTAssert(room);
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                     XCTFail(@"We should not receive events after closing the session. Received: %@", event);
                     [expectation fulfill];
@@ -435,7 +435,7 @@
             XCTAssertNil(mxSession.myUser);
 
             // Do some activity to check nothing comes through mxSession, room and bob
-            [bobRestClient sendTextMessageToRoom:roomId text:@"A message" success:^(NSString *eventId) {
+            [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"A message" success:^(NSString *eventId) {
 
                 [expectation performSelector:@selector(fulfill) withObject:nil afterDelay:5];
 
@@ -465,7 +465,7 @@
 
             [mxSession start:^{
 
-                NSUInteger storeRoomsCount = store.rooms.count;
+                NSUInteger storeRoomsCount = store.roomSummaryStore.rooms.count;
 
                 XCTAssertGreaterThan(storeRoomsCount, 0);
 
@@ -477,7 +477,7 @@
                     // Check the stream has been correctly shutdowned. Checking that the store has not changed is one way to verify it
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
 
-                        XCTAssertEqual(store.rooms.count, storeRoomsCount, @"There must still the same number of stored rooms");
+                        XCTAssertEqual(store.roomSummaryStore.rooms.count, storeRoomsCount, @"There must still the same number of stored rooms");
                         [expectation fulfill];
 
                     });
@@ -519,7 +519,7 @@
                 }];
 
                 MXRoom *room = [mxSession roomWithRoomId:roomId];
-                [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+                [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                     [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                         eventCount++;
                         XCTAssertFalse(paused, @"We should not receive events when paused. Received: %@", event);
@@ -539,7 +539,7 @@
 
                 // Do some activity while MXSession is paused
                 // We should not receive events while paused
-                [bobRestClient sendTextMessageToRoom:roomId text:@"A message" success:^(NSString *eventId) {
+                [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"A message" success:^(NSString *eventId) {
 
                 } failure:^(NSError *error) {
                     XCTFail(@"Cannot set up intial test conditions - error: %@", error);
@@ -591,7 +591,7 @@
                 }];
 
                 MXRoom *room = [mxSession roomWithRoomId:roomId];
-                [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+                [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                     [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                         eventCount++;
                         XCTAssertFalse(paused, @"We should not receive events when paused. Received: %@", event);
@@ -729,7 +729,7 @@
             [expectation fulfill];
         }];
 
-        [room sendTextMessage:@"Hello" success:nil failure:^(NSError *error) {
+        [room sendTextMessage:@"Hello" threadId:nil success:nil failure:^(NSError *error) {
             XCTFail(@"The request should not fail - NSError: %@", error);
             [expectation fulfill];
         }];
@@ -1454,7 +1454,9 @@
                                          }
                                  } forUser:mxSession.myUserId];
 
-        [aliceRestClient sendToDevice:kMXEventTypeStringRoomKeyRequest contentMap:contentMap txnId:nil success:^{
+        MXToDevicePayload *payload = [[MXToDevicePayload alloc] initWithEventType:kMXEventTypeStringRoomKeyRequest
+                                                                       contentMap:contentMap];
+        [aliceRestClient sendToDevice:payload success:^{
 
         } failure:^(NSError *error) {
             XCTFail(@"Cannot set up intial test conditions - error: %@", error);
@@ -1507,6 +1509,21 @@
     }];
 }
 
+#pragma mark Account Data tests
+
+-(void)testAccountDataIsDeletedLocally
+{
+    id<MXStore> store = MXFileStore.new;
+    [matrixSDKTestsData doMXSessionTestWithBob:self andStore:store readyToTest:^(MXSession *mxSession, XCTestExpectation *expectation) {
+        NSString* accountDataType = @"foo";
+        [mxSession.accountData updateDataWithType:accountDataType data:NSDictionary.new];
+        XCTAssertNotNil([mxSession.accountData accountDataForEventType:accountDataType]);
+        [mxSession deleteAccountDataWithType:accountDataType
+                                     success:^{ XCTAssertNil([mxSession.accountData accountDataForEventType:accountDataType]); [expectation fulfill]; }
+                                     failure:^(NSError *error) { }
+        ];
+    }];
+}
 
 @end
 

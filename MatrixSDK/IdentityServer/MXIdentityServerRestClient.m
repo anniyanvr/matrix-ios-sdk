@@ -17,7 +17,7 @@
 #import "MXIdentityServerRestClient.h"
 
 #import <AFNetworking/AFNetworking.h>
-#import <OLMKit/OLMUtility.h>
+#import <CommonCrypto/CommonDigest.h>
 
 #import "MXHTTPClient.h"
 #import "MXError.h"
@@ -63,24 +63,24 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return self.httpClient.accessToken;
 }
 
-- (void)setShouldRenewTokenHandler:(MXHTTPClientShouldRenewTokenHandler)shouldRenewTokenHandler
+- (void)setTokenValidationResponseHandler:(MXHTTPClientTokenValidationResponseHandler)tokenValidationResponseHandler
 {
-    self.httpClient.shouldRenewTokenHandler = shouldRenewTokenHandler;
+    self.httpClient.tokenValidationResponseHandler = tokenValidationResponseHandler;
 }
 
-- (MXHTTPClientShouldRenewTokenHandler)shouldRenewTokenHandler
+- (MXHTTPClientTokenValidationResponseHandler)tokenValidationResponseHandler
 {
-    return self.httpClient.shouldRenewTokenHandler;
+    return self.httpClient.tokenValidationResponseHandler;
 }
 
-- (void)setRenewTokenHandler:(MXHTTPClientRenewTokenHandler)renewTokenHandler
+- (void)setTokenProviderHandler:(MXHTTPClientTokenProviderHandler)tokenProviderHandler
 {
-    self.httpClient.renewTokenHandler = renewTokenHandler;
+    self.httpClient.tokenProviderHandler = tokenProviderHandler;
 }
 
-- (MXHTTPClientRenewTokenHandler)renewTokenHandler
+- (MXHTTPClientTokenProviderHandler)tokenProviderHandler
 {
-    return self.httpClient.renewTokenHandler;
+    return self.httpClient.tokenProviderHandler;
 }
 
 - (BOOL)isUsingV2API
@@ -97,7 +97,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     self = [super init];
     if (self)
     {
-        MXHTTPClient *httpClient = [[MXHTTPClient alloc] initWithBaseURL:identityServer accessToken:accessToken andOnUnrecognizedCertificateBlock:onUnrecognizedCertBlock];
+        MXHTTPClient *httpClient = [[MXHTTPClient alloc] initWithBaseURL:identityServer authenticated:accessToken!=nil andOnUnrecognizedCertificateBlock:onUnrecognizedCertBlock];
         // The identity server accepts parameters in form data form for some requests
         httpClient.requestParametersInJSON = NO;
 
@@ -173,7 +173,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return [self.httpClient requestWithMethod:@"GET"
                                          path:path
                                    parameters:nil
-                           needsAuthorization:YES
+                           needsAuthentication:YES
                                       success:^(NSDictionary *JSONResponse) {
                                           if (success)
                                           {
@@ -316,7 +316,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return [self.httpClient requestWithMethod:@"GET"
                                          path:path
                                    parameters:nil
-                           needsAuthorization:YES
+                          needsAuthentication:YES
                                       success:^(NSDictionary *JSONResponse) {
                                           if (success)
                                           {
@@ -388,9 +388,11 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
                 case MXIdentityServerHashAlgorithmSHA256:
                 {
                     NSString *threePidConcatenation = [NSString stringWithFormat:@"%@ %@ %@", threepid, medium, pepper];
-                    
-                    OLMUtility *olmUtility = [OLMUtility new];
-                    NSString *hashedSha256ThreePid = [olmUtility sha256:[threePidConcatenation dataUsingEncoding:NSUTF8StringEncoding]];
+
+                    // Hash the concatenated string using the helper method
+                    NSString *hashedSha256ThreePid = sha256(threePidConcatenation);
+
+                    // Convert hashed SHA-256 string to base64 URL
                     hashedTreePid = [MXBase64Tools base64ToBase64Url:hashedSha256ThreePid];
                     
                     threePidArrayByThreePidConcatHash[hashedTreePid] = threepidArray;
@@ -417,7 +419,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return [self.httpClient requestWithMethod:@"POST"
                                          path:path
                                    parameters:nil
-                           needsAuthorization:YES
+                          needsAuthentication:YES
                                          data:payloadData
                                       headers:@{@"Content-Type": @"application/json"}
                                       timeout:-1
@@ -483,6 +485,20 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     
 }
 
+// Helper method to perform SHA256 hashing
+NSString *sha256(NSString *input) {
+    const char *str = [input UTF8String];
+    unsigned char result[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(str, (CC_LONG)strlen(str), result);
+    
+    NSMutableString *hash = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
+        [hash appendFormat:@"%02x", result[i]];
+    }
+    
+    return hash;
+}
+
 #pragma mark Establishing associations
 
 - (MXHTTPOperation*)requestEmailValidation:(NSString*)email
@@ -517,7 +533,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return [self.httpClient requestWithMethod:@"POST"
                                          path:path
                                    parameters:nil
-                           needsAuthorization:self.isUsingV2API
+                          needsAuthentication:self.isUsingV2API
                                          data:payloadData
                                       headers:@{@"Content-Type": @"application/json"}
                                       timeout:-1
@@ -571,7 +587,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return [self.httpClient requestWithMethod:@"POST"
                                          path:path
                                    parameters:nil
-                           needsAuthorization:self.isUsingV2API
+                          needsAuthentication:self.isUsingV2API
                                          data:payloadData
                                       headers:@{@"Content-Type": @"application/json"}
                                       timeout:-1
@@ -629,7 +645,7 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
     return [self.httpClient requestWithMethod:@"POST"
                                          path:apiPath
                                    parameters:nil
-                           needsAuthorization:self.isUsingV2API
+                          needsAuthentication:self.isUsingV2API
                                          data:payloadData
                                       headers:@{@"Content-Type": @"application/json"}
                                       timeout:-1
@@ -736,12 +752,6 @@ NSString *const MXIdentityServerRestClientErrorDomain = @"org.matrix.sdk.MXIdent
                                       } failure:^(NSError *error) {
                                           [self dispatchFailure:error inBlock:failure];
                                       }];
-}
-
-- (MXHTTPOperation *)getAccessTokenAndRenewIfNeededWithSuccess:(void (^)(NSString *accessToken))success
-                                                       failure:(void (^)(NSError *error))failure
-{
-    return [self.httpClient getAccessTokenAndRenewIfNeededWithSuccess:success failure:failure];
 }
 
 #pragma mark - Private methods

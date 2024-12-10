@@ -18,8 +18,9 @@
 #import "MXNoStore.h"
 
 #import "MXEventsEnumeratorOnArray.h"
+#import "MXVoidRoomSummaryStore.h"
 
-@interface MXNoStore ()
+@interface MXNoStore () <MXEventsEnumeratorDataSource>
 {
     // key: roomId, value: the pagination token
     NSMutableDictionary<NSString*, NSString*> *paginationTokens;
@@ -39,7 +40,7 @@
     NSMutableDictionary *lastMessages;
 
     // key: roomId, value: the text message the user typed
-    NSMutableDictionary *partialTextMessages;
+    NSMutableDictionary *partialAttributedTextMessages;
 
     NSString *eventStreamToken;
 
@@ -55,6 +56,8 @@
 
 @implementation MXNoStore
 
+@synthesize roomSummaryStore;
+
 @synthesize eventStreamToken, userAccountData, syncFilterId;
 
 - (instancetype)init
@@ -68,9 +71,10 @@
         hasReachedHomeServerPaginations = [NSMutableDictionary dictionary];
         hasLoadedAllRoomMembersForRooms = [NSMutableDictionary dictionary];
         lastMessages = [NSMutableDictionary dictionary];
-        partialTextMessages = [NSMutableDictionary dictionary];
+        partialAttributedTextMessages = [NSMutableDictionary dictionary];
         users = [NSMutableDictionary dictionary];
         groups = [NSMutableDictionary dictionary];
+        roomSummaryStore = [[MXVoidRoomSummaryStore alloc] init];
     }
     return self;
 }
@@ -79,6 +83,15 @@
 {
     // Nothing to do
     onComplete();
+}
+
+- (MXStoreService *)storeService
+{
+    return nil;
+}
+
+- (void)setStoreService:(MXStoreService *)storeService
+{
 }
 
 - (void)storeEventForRoom:(NSString*)roomId event:(MXEvent*)event direction:(MXTimelineDirection)direction
@@ -108,6 +121,17 @@
 - (BOOL)eventExistsWithEventId:(NSString *)eventId inRoom:(NSString *)roomId
 {
     // Events are not stored. So, we cannot find it.
+    return NO;
+}
+
+- (BOOL)removeAllMessagesSentBefore:(uint64_t)limitTs inRoom:(nonnull NSString *)roomId
+{
+    // Only the last message is stored
+    MXEvent *lastMessage = lastMessages[roomId];
+    if (!lastMessage.isState && lastMessage.originServerTs < limitTs) {
+        lastMessages[roomId] = nil;
+        return YES;
+    }
     return NO;
 }
 
@@ -151,10 +175,11 @@
     {
         [lastMessages removeObjectForKey:roomId];
     }
-    if (partialTextMessages[roomId])
+    if (partialAttributedTextMessages[roomId])
     {
-        [partialTextMessages removeObjectForKey:roomId];
+        [partialAttributedTextMessages removeObjectForKey:roomId];
     }
+    [roomSummaryStore removeSummaryOfRoom:roomId];
 }
 
 - (void)deleteAllData
@@ -165,7 +190,8 @@
     [hasReachedHomeServerPaginations removeAllObjects];
     [hasLoadedAllRoomMembersForRooms removeAllObjects];
     [lastMessages removeAllObjects];
-    [partialTextMessages removeAllObjects];
+    [partialAttributedTextMessages removeAllObjects];
+    [roomSummaryStore removeAllSummaries];
 }
 
 - (void)storePaginationTokenOfRoom:(NSString*)roomId andToken:(NSString*)token
@@ -224,7 +250,7 @@
     // of MXNoStore is to not store messages so that all paginations are made
     // via requests to the homeserver.
     // So, return an empty enumerator.
-    return [[MXEventsEnumeratorOnArray alloc] initWithMessages:@[]];
+    return [[MXEventsEnumeratorOnArray alloc] initWithEventIds:@[] dataSource:nil];
 }
 
 - (id<MXEventsEnumerator>)messagesEnumeratorForRoom:(NSString *)roomId withTypeIn:(NSArray *)types
@@ -232,7 +258,11 @@
     // [MXStore messagesEnumeratorForRoom: withTypeIn: ignoreMemberProfileChanges:] is used
     // to get the last message of the room which must not be nil.
     // So return an enumerator with the last message we have without caring of its type.
-    return [[MXEventsEnumeratorOnArray alloc] initWithMessages:@[lastMessages[roomId]]];
+    MXEvent *event = lastMessages[roomId];
+    if (event) {
+        return [[MXEventsEnumeratorOnArray alloc] initWithEventIds:@[event.eventId] dataSource:self];
+    }
+    return [[MXEventsEnumeratorOnArray alloc] initWithEventIds:@[] dataSource:nil];
 }
 
 - (NSArray<MXEvent *> *)relationsForEvent:(NSString *)eventId inRoom:(NSString *)roomId relationType:(NSString *)relationType
@@ -257,6 +287,11 @@
 
 - (void)setAreAllIdentityServerTermsAgreed:(BOOL)areAllIdentityServerTermsAgreed
 {
+}
+
+- (NSArray<NSString *> *)roomIds
+{
+    return @[];
 }
 
 #pragma mark - Matrix users
@@ -329,6 +364,11 @@
 {
 }
 
+- (NSArray<NSString *> *)allFilterIds
+{
+    return @[];
+}
+
 - (void)filterWithFilterId:(nonnull NSString*)filterId
                    success:(nonnull void (^)(MXFilterJSONModel * _Nullable filter))success
                    failure:(nullable void (^)(NSError * _Nullable error))failure
@@ -343,21 +383,21 @@
     success(nil);
 }
 
-- (void)storePartialTextMessageForRoom:(NSString *)roomId partialTextMessage:(NSString *)partialTextMessage
+- (void)storePartialAttributedTextMessageForRoom:(NSString *)roomId partialAttributedTextMessage:(NSAttributedString *)partialAttributedTextMessage
 {
-    if (partialTextMessage)
+    if (partialAttributedTextMessage)
     {
-        partialTextMessages[roomId] = partialTextMessage;
+        partialAttributedTextMessages[roomId] = partialAttributedTextMessage;
     }
     else
     {
-        [partialTextMessages removeObjectForKey:roomId];
+        [partialAttributedTextMessages removeObjectForKey:roomId];
     }
 }
 
-- (NSString *)partialTextMessageOfRoom:(NSString *)roomId
+- (NSAttributedString *)partialAttributedTextMessageOfRoom:(NSString *)roomId
 {
-    return partialTextMessages[roomId];
+    return partialAttributedTextMessages[roomId];
 }
 
 - (BOOL)isPermanent
@@ -382,6 +422,23 @@
     return nil;
 }
 
+- (void)getEventReceipts:(nonnull NSString *)roomId eventId:(nonnull NSString *)eventId threadId:(nonnull NSString *)threadId sorted:(BOOL)sort completion:(nonnull void (^)(NSArray<MXReceiptData *> * _Nonnull))completion {
+    if (completion)
+    {
+        completion(@[]);
+    }
+}
+
+
+- (nullable MXReceiptData *)getReceiptInRoom:(nonnull NSString *)roomId threadId:(nonnull NSString *)threadId forUserId:(nonnull NSString *)userId {
+    return nil;
+}
+
+
+- (nonnull NSDictionary<NSString *,MXReceiptData *> *)getReceiptsInRoom:(nonnull NSString *)roomId forUserId:(nonnull NSString *)userId {
+    return @{};
+}
+
 - (void)loadReceiptsForRoom:(NSString *)roomId completion:(void (^)(void))completion
 {
     if (completion)
@@ -392,9 +449,19 @@
     }
 }
 
-- (NSUInteger)localUnreadEventCount:(NSString*)roomId withTypeIn:(NSArray*)types
+- (NSUInteger)localUnreadEventCount:(NSString *)roomId threadId:(NSString *)threadId withTypeIn:(NSArray *)types
 {
     return 0;
+}
+
+- (NSDictionary<NSString *,NSNumber *> *)localUnreadEventCountPerThread:(NSString *)roomId withTypeIn:(NSArray *)types
+{
+    return @{};
+}
+
+- (NSArray<MXEvent *> *)newIncomingEventsInRoom:(NSString *)roomId threadId:(NSString *)threadId withTypeIn:(NSArray<MXEventTypeString> *)types
+{
+    return @[];
 }
 
 - (MXWellKnown *)homeserverWellknown
@@ -402,6 +469,22 @@
     return nil;
 }
 - (void)storeHomeserverWellknown:(nonnull MXWellKnown *)homeserverWellknown
+{
+}
+
+- (MXCapabilities *)homeserverCapabilities
+{
+    return nil;
+}
+- (void)storeHomeserverCapabilities:(MXCapabilities *)homeserverCapabilities
+{
+}
+
+- (MXMatrixVersions *)supportedMatrixVersions
+{
+    return nil;
+}
+- (void)storeSupportedMatrixVersions:(MXMatrixVersions *)supportedMatrixVersions
 {
 }
 
@@ -414,6 +497,19 @@
 {
 }
 
+- (void)setUnreadForRoom:(nonnull NSString *)roomId
+{
+}
+
+- (void)resetUnreadForRoom:(nonnull NSString *)roomId
+{
+}
+
+- (BOOL)isRoomMarkedAsUnread:(nonnull NSString*)roomId
+{
+    return NO;
+}
+
 - (void)close
 {
     [paginationTokens removeAllObjects];
@@ -421,25 +517,20 @@
     [highlightCounts removeAllObjects];
     [hasReachedHomeServerPaginations removeAllObjects];
     [lastMessages removeAllObjects];
-    [partialTextMessages removeAllObjects];
+    [partialAttributedTextMessages removeAllObjects];
     [users removeAllObjects];
     [groups removeAllObjects];
 }
 
-#pragma mark - MXRoomSummaryStore
+#pragma mark - MXEventsEnumeratorDataSource
 
-- (NSArray<NSString *> *)rooms
+- (MXEvent *)eventWithEventId:(NSString *)eventId
 {
-    return @[];
-}
-
-- (void)storeSummaryForRoom:(NSString *)roomId summary:(id<MXRoomSummaryProtocol>)summary
-{
-    
-}
-
-- (id<MXRoomSummaryProtocol>)summaryOfRoom:(NSString *)roomId
-{
+    for (MXEvent *event in lastMessages.allValues) {
+        if ([event.eventId isEqualToString:eventId]) {
+            return event;
+        }
+    }
     return nil;
 }
 

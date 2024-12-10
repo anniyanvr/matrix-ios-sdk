@@ -19,12 +19,19 @@
 #import "MatrixSDKTestsData.h"
 
 #import "MXSession.h"
+#import "MXFileStore.h"
 #import "MXTools.h"
 #import "MXSendReplyEventDefaultStringLocalizer.h"
 
 // Do not bother with retain cycles warnings in tests
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-retain-cycles"
+
+@interface MXFileStore ()
+- (NSString*)unreadRoomsFile;
+- (NSString*)unreadFileForRoomsForBackup:(BOOL)backup;
+@end
+
 
 @interface MXRoomTests : XCTestCase
 {
@@ -68,7 +75,7 @@
         };
         
         // Register the listener
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
 
             [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
@@ -87,7 +94,7 @@
         // Populate a text message in parallel
         [matrixSDKTestsData doMXRestClientTestWithBobAndThePublicRoom:nil readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation2) {
             
-            [bobRestClient sendTextMessageToRoom:roomId text:@"Hello listeners!" success:^(NSString *eventId) {
+            [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"Hello listeners!" success:^(NSString *eventId) {
                 
                 NSAssert(nil != eventId, @"Cannot set up intial test conditions");
                 
@@ -123,7 +130,7 @@
         };
         
         // Register the listener for m.room.message.only
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
 
             [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringRoomMessage]
                                         onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
@@ -143,7 +150,7 @@
         // Populate a text message in parallel
         [matrixSDKTestsData doMXRestClientTestWithBobAndThePublicRoom:nil readyToTest:^(MXRestClient *bobRestClient, NSString *roomId, XCTestExpectation *expectation2) {
             
-            [bobRestClient sendTextMessageToRoom:roomId text:@"Hello listeners!" success:^(NSString *eventId) {
+            [bobRestClient sendTextMessageToRoom:roomId threadId:nil text:@"Hello listeners!" success:^(NSString *eventId) {
                 
                 NSAssert(nil != eventId, @"Cannot set up intial test conditions");
                 
@@ -167,7 +174,7 @@
         NSString *roomId = room.roomId;
 
         __block MXMembership lastKnownMembership = MXMembershipUnknown;
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
             [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringRoomMember] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
                 lastKnownMembership = liveTimeline.state.membership;
@@ -187,6 +194,52 @@
         } failure:^(NSError *error) {
             XCTFail(@"The request should not fail - NSError: %@", error);
             [expectation fulfill];
+        }];
+    }];
+}
+
+- (void)testIgnoreInviteSender
+{
+    [matrixSDKTestsData doMXRestClientTestWithBobAndARoom:self readyToTest:^(MXRestClient *bobClient, NSString *roomId, XCTestExpectation *expectation) {
+
+        [matrixSDKTestsData doMXRestClientTestWithAlice:nil readyToTest:^(MXRestClient *aliceClient, XCTestExpectation *expectation2) {
+
+            MXSession *mxSession = [[MXSession alloc] initWithMatrixRestClient:aliceClient];
+            [matrixSDKTestsData retain:mxSession];
+
+            [bobClient inviteUser:aliceClient.credentials.userId toRoom:roomId success:^{
+                [mxSession startWithSyncFilter:[MXFilterJSONModel syncFilterWithMessageLimit:0]
+                              onServerSyncDone:^{
+
+                    MXRoom *room = [mxSession roomWithRoomId:roomId];
+                    XCTAssertEqual(mxSession.ignoredUsers.count, 0);
+                    XCTAssertEqual([mxSession isUserIgnored:bobClient.credentials.userId], NO);
+                    
+                    // Listen to mxSession.ignoredUsers changes where the successful assertion happens
+                    [[NSNotificationCenter defaultCenter] addObserverForName:kMXSessionIgnoredUsersDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull notif) {
+                        if (notif.object == mxSession)
+                        {
+                            XCTAssertEqual(mxSession.ignoredUsers.count, 1);
+                            XCTAssertEqual([mxSession isUserIgnored:bobClient.credentials.userId], YES);
+
+                            [expectation fulfill];
+                        }
+                    }];
+                    
+                    [room ignoreInviteSender:nil failure:^(NSError *error) {
+                        XCTFail(@"Failed to ignore invite sender - NSError: %@", error);
+                        [expectation fulfill];
+                    }];
+
+                } failure:^(NSError *error) {;
+                    XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                    [expectation fulfill];
+                }];
+
+            } failure:^(NSError *error) {
+                XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                [expectation fulfill];
+            }];
         }];
     }];
 }
@@ -247,7 +300,7 @@
 
             MXRoom *room = [mxSession roomWithRoomId:roomId];
 
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringRoomPowerLevels] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
                     XCTAssertEqual([liveTimeline.state.powerLevels powerLevelOfUserWithUserID:aliceRestClient.credentials.userId], 36);
@@ -282,7 +335,7 @@
             MXRoom *room = [mxSession roomWithRoomId:roomId];
 
             __block NSUInteger eventCount = 0;
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEvents:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
                     eventCount++;
@@ -327,7 +380,7 @@
 
             XCTAssertEqual(room.typingUsers.count, 0);
 
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringTypingNotification] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
                     XCTAssertEqual(room.typingUsers.count, 1);
@@ -361,7 +414,7 @@
         __block NSUInteger tagEventUpdata = 0;
 
         // Wait for the m.tag event to get the room tags update
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
             [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringRoomTag] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
                 if (++tagEventUpdata == 1)
@@ -408,7 +461,7 @@
         NSString *newTagOrder = nil;
 
         // Wait for the m.tag event that corresponds to "newTag"
-        [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
             [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringRoomTag] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
 
                 MXRoomTag *newRoomTag = room.accountData.tags[newTag];
@@ -450,7 +503,7 @@
             MXRoom *room = [mxSession roomWithRoomId:roomId];
             
             // Wait for the m.tagged_events event
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringTaggedEvents] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                     
                     XCTAssertEqual(event.eventType, MXEventTypeTaggedEvents);
@@ -494,7 +547,7 @@
             __block MXEvent *taggedEvent;
             
             // Wait for the m.tagged_events event
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringTaggedEvents] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                     
                     XCTAssertEqual(event.eventType, MXEventTypeTaggedEvents);
@@ -551,7 +604,7 @@
             __block MXEvent *taggedEvent;
             
             // Wait for the m.tagged_events event
-            [room liveTimeline:^(MXEventTimeline *liveTimeline) {
+            [room liveTimeline:^(id<MXEventTimeline> liveTimeline) {
                 [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringTaggedEvents] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                     
                     XCTAssertEqual(event.eventType, MXEventTypeTaggedEvents);
@@ -720,7 +773,7 @@
                 __block MXEvent *localEchoEvent = nil;
                 
                 // Reply to first message
-                [room sendReplyToEvent:event withTextMessage:secondMessageReplyToFirst formattedTextMessage:secondMessageFormattedReplyToFirst stringLocalizer:defaultStringLocalizer localEcho:&localEchoEvent success:^(NSString *eventId) {
+                [room sendReplyToEvent:event withTextMessage:secondMessageReplyToFirst formattedTextMessage:secondMessageFormattedReplyToFirst stringLocalizer:defaultStringLocalizer threadId:nil localEcho:&localEchoEvent success:^(NSString *eventId) {
                     MXLogDebug(@"Send reply to first message with success");
                 } failure:^(NSError *error) {
                     XCTFail(@"The request should not fail - NSError: %@", error);
@@ -733,9 +786,9 @@
                 NSString *firstEventId = event.eventId;
                 NSString *firstEventSender = event.sender;
                 
-                NSString *secondEventBody = localEchoEvent.content[@"body"];
+                NSString *secondEventBody = localEchoEvent.content[kMXMessageBodyKey];
                 NSString *secondEventFormattedBody = localEchoEvent.content[@"formatted_body"];
-                NSString *secondEventRelatesToEventId = localEchoEvent.content[@"m.relates_to"][@"m.in_reply_to"][@"event_id"];
+                NSString *secondEventRelatesToEventId = localEchoEvent.content[kMXEventRelationRelatesToKey][kMXEventContentRelatesToKeyInReplyTo][kMXEventContentRelatesToKeyEventId];
 
                 NSString *permalinkToUser = [MXTools permalinkToUserWithUserId:firstEventSender];
                 NSString *permalinkToEvent = [MXTools permalinkToEvent:firstEventId inRoom:roomId];
@@ -752,7 +805,7 @@
                 __block MXEvent *localEchoEvent = nil;
                 
                 // Reply to second message, which was also a reply
-                [room sendReplyToEvent:event withTextMessage:thirdMessageReplyToSecond formattedTextMessage:thirdMessageFormattedReplyToSecond stringLocalizer:defaultStringLocalizer localEcho:&localEchoEvent success:^(NSString *eventId) {
+                [room sendReplyToEvent:event withTextMessage:thirdMessageReplyToSecond formattedTextMessage:thirdMessageFormattedReplyToSecond stringLocalizer:defaultStringLocalizer threadId:nil localEcho:&localEchoEvent success:^(NSString *eventId) {
                     MXLogDebug(@"Send reply to second message with success");
                 } failure:^(NSError *error) {
                     XCTFail(@"The request should not fail - NSError: %@", error);
@@ -765,9 +818,9 @@
                 NSString *secondEventId = event.eventId;
                 NSString *secondEventSender = event.sender;
                 
-                NSString *thirdEventBody = localEchoEvent.content[@"body"];
+                NSString *thirdEventBody = localEchoEvent.content[kMXMessageBodyKey];
                 NSString *thirdEventFormattedBody = localEchoEvent.content[@"formatted_body"];
-                NSString *thirdEventRelatesToEventId = localEchoEvent.content[@"m.relates_to"][@"m.in_reply_to"][@"event_id"];
+                NSString *thirdEventRelatesToEventId = localEchoEvent.content[kMXEventRelationRelatesToKey][kMXEventContentRelatesToKeyInReplyTo][kMXEventContentRelatesToKeyEventId];
                 
                 NSString *permalinkToUser = [MXTools permalinkToUserWithUserId:secondEventSender];
                 NSString *permalinkToEvent = [MXTools permalinkToEvent:secondEventId inRoom:roomId];
@@ -786,10 +839,184 @@
         }];
         
         // Send first message
-        [room sendTextMessage:firstMessage formattedText:firstFormattedMessage localEcho:nil success:^(NSString *eventId) {
+        [room sendTextMessage:firstMessage formattedText:firstFormattedMessage threadId:nil localEcho:nil success:^(NSString *eventId) {
             MXLogDebug(@"Send first message with success");
         } failure:^(NSError *error) {
             XCTFail(@"The request should not fail - NSError: %@", error);
+            [expectation fulfill];
+        }];
+    }];
+}
+
+- (void)testUpgrade
+{
+    [matrixSDKTestsData doMXSessionTestWithBobAndARoomWithMessages:self readyToTest:^(MXSession *mxSession, MXRoom *room, XCTestExpectation *expectation) {
+        NSString *newRoomVersion = @"9";
+        
+        [mxSession.matrixRestClient upgradeRoomWithId:room.roomId to:newRoomVersion success:^(NSString *replacementRoomId) {
+            
+            XCTAssertNotEqual(room.roomId, replacementRoomId, @"Replacement room ID (%@) must be different from initial room ID (%@)", replacementRoomId, room.roomId);
+            
+            MXRoom *replacementRoom = [mxSession roomWithRoomId:replacementRoomId];
+            XCTAssertNotNil(replacementRoom, "Cannot find replacement room");
+            
+            if (replacementRoom)
+            {
+                [replacementRoom state:^(MXRoomState *roomState) {
+                    MXEvent *createEvent = [roomState stateEventsWithType:kMXEventTypeStringRoomCreate].lastObject;
+                    XCTAssertNotNil(createEvent, "Cannot find create event");
+                    
+                    NSDictionary<NSString*, id> *wireContent = createEvent.wireContent;
+                    XCTAssert([wireContent[@"creator"] isEqualToString:mxSession.myUserId]);
+                    XCTAssert([wireContent[@"room_version"] isEqualToString:newRoomVersion]);
+                    XCTAssert([wireContent[@"predecessor"][@"room_id"] isEqualToString:room.roomId]);
+                    
+                    [expectation fulfill];
+                }];
+            }
+            else
+            {
+                [expectation fulfill];
+            }
+            
+        } failure:^(NSError *error) {
+            XCTFail(@"The request should not fail - NSError: %@", error);
+            [expectation fulfill];
+        }];
+    }];
+}
+
+- (void)testMarkUnread
+{
+    
+    [matrixSDKTestsData doMXRestClientTestWithBobAndAliceInARoom:self readyToTest:^(MXRestClient *bobRestClient, MXRestClient *aliceRestClient, NSString *roomId, XCTestExpectation *expectation) {
+        
+        MXSession *bobSession = [[MXSession alloc] initWithMatrixRestClient:bobRestClient];
+        [matrixSDKTestsData retain:bobSession];
+        
+        MXFileStore *store = [[MXFileStore alloc] init];
+        
+        [bobSession setStore:store success:^{
+            [bobSession start:^{
+                MXRoom *room = [bobSession roomWithRoomId:roomId];
+                XCTAssertNotNil(room, @"the room should not be nil");
+                [room setUnread];
+                XCTAssert([room isMarkedAsUnread], @"the room should be marked as unread");
+                [room resetUnread];
+                XCTAssertFalse([room isMarkedAsUnread], @"the room should not be marked as unread");
+                [expectation fulfill];
+            } failure:^(NSError *error) {
+                XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                [expectation fulfill];
+            }];
+        } failure:^(NSError *error) {
+            XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+            [expectation fulfill];
+        }];
+    }];
+}
+
+/**
+ Check mark unread functionality with a new events
+ 
+ - Have Alice and Bob in a room
+ - Bob mark the room as unread
+ - Alice send a new message to Bob
+ - Bob's room should be unmarked as unread because a new lastmessage is received.
+ */
+- (void)testMarkUnreadWithMessage
+{
+    
+    [matrixSDKTestsData doMXRestClientTestWithBobAndAliceInARoom:self readyToTest:^(MXRestClient *bobRestClient, MXRestClient *aliceRestClient, NSString *roomId, XCTestExpectation *expectation) {
+        
+        MXSession *bobSession = [[MXSession alloc] initWithMatrixRestClient:bobRestClient];
+        MXSession *aliceSession = [[MXSession alloc] initWithMatrixRestClient:aliceRestClient];
+        
+        [matrixSDKTestsData retain:bobSession];
+        
+        MXFileStore *store = [[MXFileStore alloc] init];
+        
+        [bobSession setStore:store success:^{
+            [bobSession start:^{
+                MXRoom *room = [bobSession roomWithRoomId:roomId];
+                XCTAssertNotNil(room, @"the room should not be nil");
+                [room setUnread];
+                XCTAssert([room isMarkedAsUnread], @"the room should be marked as unread");
+                
+                [room listenToEventsOfTypes:@[kMXEventTypeStringRoomMessage] onEvent:^(MXEvent * _Nonnull event, MXTimelineDirection direction, MXRoomState * _Nullable roomState) {
+                    
+                    dispatch_time_t delayTime = dispatch_time(DISPATCH_TIME_NOW, 100);
+                    dispatch_after(delayTime, dispatch_get_main_queue(), ^(void) {
+                        XCTAssertFalse([room isMarkedAsUnread], @"the room should not be marked as unread");
+                        [expectation fulfill];
+                    });
+                }];
+
+                MXFileStore *aliceStore = [[MXFileStore alloc] init];
+                [aliceSession setStore:aliceStore success:^{
+                    [aliceSession start:^{
+                        MXRoom *aliceRoom = [aliceSession roomWithRoomId:roomId];
+                        [aliceRoom sendTextMessage:@"Hello" threadId:nil success:^(NSString *eventId) {
+                            [aliceSession close];
+                                                } failure:^(NSError *error) {
+                                                    XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                                                    [expectation fulfill];
+                                                }];
+                                        } failure:^(NSError *error) {
+                                            XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                                            [expectation fulfill];
+                                        }];
+                                } failure:^(NSError *error) {
+                                    XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                                    [expectation fulfill];
+                                }];
+            } failure:^(NSError *error) {
+                XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+                [expectation fulfill];
+            }];
+        } failure:^(NSError *error) {
+            XCTFail(@"Cannot set up intial test conditions - error: %@", error);
+            [expectation fulfill];
+        }];
+    }];
+}
+
+// Test migration of the MXFileStore unread rooms file that was at a bad location.
+// - Have a Bob session with an unread room
+// - Close that session
+// - Reopen a Bob session (it simulates an app restart)
+// -> The room should be still unread, meaning the migration went as expected
+// TODO: Delete this test when removing the unreadFileForRoomsForBackup() method
+- (void)testUnreadRoomsFileMigration
+{
+    // - Have a Bob session with an unread room
+    MXFileStore *store = [MXFileStore new];
+    [matrixSDKTestsData doMXSessionTestWithBobAndARoom:self andStore:store readyToTest:^(MXSession *bobSession, MXRoom *room, XCTestExpectation *expectation) {
+        [room setUnread];
+        
+        // - Close that session
+        NSString *roomId = room.roomId;
+        MXRestClient *bobRestClient = bobSession.matrixRestClient;
+        NSString *wrongFile = [store unreadFileForRoomsForBackup:NO];
+        NSString *goodFile = [store unreadRoomsFile];
+        [bobSession close];
+        
+        // - Move the unread rooms file to the previous wrong location
+        [[NSFileManager defaultManager] moveItemAtPath:goodFile toPath:wrongFile error:nil];
+        
+        // - Reopen a Bob session (it simulates an app restart)
+        MXSession *bobSession2 = [[MXSession alloc] initWithMatrixRestClient:bobRestClient];
+        [self->matrixSDKTestsData retain:bobSession2];
+        [bobSession2 setStore:[[MXFileStore alloc] init] success:^{
+            
+            // -> The room should be still unread, meaning the migration went as expected
+            MXRoom *room = [bobSession2 roomWithRoomId:roomId];
+            XCTAssert([room isMarkedAsUnread], @"the room should still be marked as unread");
+            
+            [expectation fulfill];
+            
+        } failure:^(NSError *error) {
+            XCTFail(@"Cannot set up intial test conditions - error: %@", error);
             [expectation fulfill];
         }];
     }];

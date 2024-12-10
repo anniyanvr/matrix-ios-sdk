@@ -49,6 +49,16 @@
 - (void)replaceEvent:(MXEvent*)event;
 
 /**
+ Remove all the messages sent before a specific timestamp in a room.
+ The state events are not removed during this operation. We keep them in the timeline.
+ 
+ @param limitTs the timestamp from which the messages are kept.
+ 
+ @return YES if at least one event has been removed.
+ */
+- (BOOL)removeAllMessagesSentBefore:(uint64_t)limitTs;
+
+/**
  Get an event from this room.
 
  @return the MXEvent object or nil if not found.
@@ -93,13 +103,23 @@
 - (id<MXEventsEnumerator>)enumeratorForMessagesWithTypeIn:(NSArray*)types;
 
 /**
-  Get all events newer than the event with the passed id.
+ Get all events in thread since the root message event.
 
-  @param eventId the event id to find.
-  @param types a set of event types strings (MXEventTypeString).
-  @return the messages events after an event Id
+ @param threadId the thread id to find events in.
+ @param types a set of event types strings (MXEventTypeString).
+ @return the messages events after an event Id
  */
-- (NSArray*)eventsAfter:(NSString *)eventId except:(NSString*)userId withTypeIn:(NSSet*)types;
+- (NSArray<MXEvent*>*)eventsInThreadWithThreadId:(NSString *)threadId except:(NSString *)userId withTypeIn:(NSSet<MXEventTypeString>*)types;
+
+/**
+ Get all events newer than the event with the passed id.
+
+ @param eventId the event id to find.
+ @param threadId the thread id to find events in. Pass nil not to use any filtering.
+ @param types a set of event types strings (MXEventTypeString).
+ @return the messages events after an event Id
+ */
+- (NSArray<MXEvent*>*)eventsAfter:(NSString *)eventId threadId:(NSString*)threadId except:(NSString*)userId withTypeIn:(NSSet<MXEventTypeString>*)types;
 
 /**
  Get events related to a specific event.
@@ -113,6 +133,6 @@
 /**
  The text message partially typed by the user but not yet sent in the room.
  */
-@property (nonatomic) NSString *partialTextMessage;
+@property (nonatomic) NSAttributedString *partialAttributedTextMessage;
 
 @end

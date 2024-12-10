@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1160"
+   LastUpgradeVersion = "1340"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -63,6 +63,9 @@
          </TestPlanReference>
          <TestPlanReference
             reference = "container:MatrixSDKTests/TestPlans/UnitTestsWithSanitizers.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:MatrixSDKTests/TestPlans/AllWorkingTests.xctestplan">
          </TestPlanReference>
       </TestPlans>
       <Testables>

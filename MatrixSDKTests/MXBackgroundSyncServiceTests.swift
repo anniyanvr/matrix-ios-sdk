@@ -29,6 +29,7 @@ class MXBackgroundSyncServiceTests: XCTestCase {
     }
 
     override func setUp() {
+        super.setUp()
         testData = MatrixSDKTestsData()
         e2eTestData = MatrixSDKTestsE2EData(matrixSDKTestsData: testData)
     }
@@ -37,6 +38,7 @@ class MXBackgroundSyncServiceTests: XCTestCase {
         testData = nil
         e2eTestData = nil
         bgSyncService = nil
+        super.tearDown()
     }
     
     
@@ -225,123 +227,6 @@ class MXBackgroundSyncServiceTests: XCTestCase {
         
     }
     
-    // Nonimal test with encryption: Get and decrypt an event from the background service
-    // - Alice and Bob are in an encrypted room
-    // - Bob stops their app
-    // - Alice relogins with a new device and creates new megolm keys
-    // - Alice sends a message
-    // - Bob uses the MXBackgroundSyncService to fetch it
-    // -> The message can be read and decypted from MXBackgroundSyncService
-    // -> Keys are stored in the intermediate MXBackgroundSyncService crypto store, not in the main crypto store
-    // - Bob restarts their MXSession
-    // -> The message is available from MXSession and no more from MXBackgroundSyncService
-    // -> Keys are stored in the main crypto store but no more in the intermediate MXBackgroundSyncService crypto store
-    func testWithEncryptedEventRollingKeys() {
-        
-        let aliceStore = MXFileStore()
-        let bobStore = MXFileStore()
-        let warnOnUnknownDevices = false
-        e2eTestData.doE2ETestWithAliceAndBob(inARoom: self, cryptedBob: true, warnOnUnknowDevices: warnOnUnknownDevices, aliceStore: aliceStore, bobStore: bobStore) { (aliceSession, bobSession, roomId, expectation) in
-            
-            guard let roomId = roomId else {
-                XCTFail("Cannot set up initial test conditions - error: room cannot be retrieved")
-                expectation?.fulfill()
-                return
-            }
-            
-            guard let aliceRestClient = aliceSession?.matrixRestClient, let bobCredentials = bobSession?.credentials else {
-                XCTFail("Cannot set up initial test conditions - error: Bob's credentials cannot be retrieved")
-                expectation?.fulfill()
-                return
-            }
-            bobSession?.close()
-
-            aliceSession?.close()
-            self.e2eTestData.loginUser(onANewDevice: self, credentials: aliceRestClient.credentials, withPassword: MXTESTS_ALICE_PWD) { newAliceSession in
-                
-                guard let room = newAliceSession?.room(withRoomId: roomId) else {
-                    XCTFail("Cannot set up initial test conditions - error: room cannot be retrieved")
-                    expectation?.fulfill()
-                    return
-                }
-                
-                newAliceSession?.crypto.warnOnUnknowDevices = warnOnUnknownDevices
-                
-                // - Alice sends a message
-                var localEcho: MXEvent?
-                room.sendTextMessage(Constants.messageText, localEcho: &localEcho) { (response) in
-                    switch response {
-                        case .success(let eventId):
-                            
-                            guard let eventId = eventId else {
-                                XCTFail("Cannot set up initial test conditions - error: room cannot be retrieved")
-                                expectation?.fulfill()
-                                return
-                            }
-                            
-                            // - Bob uses the MXBackgroundSyncService to fetch it
-                            self.bgSyncService = MXBackgroundSyncService(withCredentials: bobCredentials)
-                            
-                            self.bgSyncService?.event(withEventId: eventId, inRoom: roomId) { (response) in
-                                switch response {
-                                    case .success(let event):
-                                        // -> The message can be read and decypted from MXBackgroundSyncService
-                                        XCTAssertTrue(event.isEncrypted, "Event should be encrypted")
-                                        XCTAssertNotNil(event.clear, "Event should be decrypted successfully")
-                                        
-                                        let text = event.content["body"] as? String
-                                        XCTAssertEqual(text, Constants.messageText, "Event content should match")
-                                        
-                                        XCTAssertNil(bobStore.event(withEventId: eventId, inRoom: roomId), "Event should not be in session store yet")
-                                        
-                                        let syncResponseStore = MXSyncResponseFileStore(withCredentials: bobCredentials)
-                                        let syncResponseStoreManager = MXSyncResponseStoreManager(syncResponseStore: syncResponseStore)
-                                        XCTAssertNotNil(syncResponseStoreManager.event(withEventId: eventId, inRoom: roomId), "Event should be stored in sync response store")
-                                        
-                                        // -> Keys are stored in the intermediate MXBackgroundSyncService crypto store, not in the main crypto store
-                                        let cryptoStore = MXRealmCryptoStore(credentials: bobCredentials)
-                                        let bgSyncServiceCryptoStore = MXRealmCryptoStore(credentials: self.credentialForBgCryptoStore(withCredentials: bobCredentials))
-                                        let sessionId = event.wireContent["session_id"] as! String
-                                        let senderKey = event.wireContent["sender_key"] as! String
-                                        XCTAssertNil(cryptoStore?.inboundGroupSession(withId: sessionId, andSenderKey: senderKey), "Key must not be yet stored in the main MXRealmCryptoStore")
-                                        XCTAssertNotNil(bgSyncServiceCryptoStore?.inboundGroupSession(withId: sessionId, andSenderKey: senderKey), "Key must be stored in the intermediate MXBackgroundService MXRealmCryptoStore")
-                                        
-                                        // - Bob restarts their MXSession
-                                        let newBobSession = MXSession(matrixRestClient: MXRestClient(credentials: bobCredentials, unrecognizedCertificateHandler: nil))
-                                        self.testData.retain(newBobSession)
-                                        newBobSession?.setStore(bobStore, completion: { (_) in
-                                            newBobSession?.start(withSyncFilterId: bobStore.syncFilterId, completion: { (_) in
-                                                // -> The message is available from MXSession and no more from MXBackgroundSyncService
-                                                XCTAssertNil(syncResponseStoreManager.event(withEventId: eventId, inRoom: roomId), "Event should not be stored in sync response store anymore")
-                                                XCTAssertNotNil(bobStore.event(withEventId: eventId, inRoom: roomId), "Event should be in session store anymore")
-                                                
-                                                // -> Keys are stored in the main crypto store but no more in the intermediate MXBackgroundSyncService crypto store
-                                                let cryptoStore = MXRealmCryptoStore(credentials: bobCredentials)
-                                                XCTAssertNotNil(cryptoStore?.inboundGroupSession(withId: sessionId, andSenderKey: senderKey), "Key must be now stored in the main MXRealmCryptoStore")
-                                                
-                                                self.bgSyncService?.event(withEventId: eventId, inRoom: roomId) { _ in
-                                                    let bgSyncServiceCryptoStore = MXRealmCryptoStore(credentials: self.credentialForBgCryptoStore(withCredentials: bobCredentials))
-                                                    XCTAssertNil(bgSyncServiceCryptoStore?.inboundGroupSession(withId: sessionId, andSenderKey: senderKey), "Key must be no more stored in the intermediate MXBackgroundService MXRealmCryptoStore")
-                                                    
-                                                    expectation?.fulfill()
-                                                }
-                                            })
-                                        })
-                                    case .failure(let error):
-                                        XCTFail("Cannot fetch the event from background sync service - error: \(error)")
-                                        expectation?.fulfill()
-                                }
-                            }
-                        case .failure(let error):
-                            XCTFail("Cannot set up initial test conditions - error: \(error)")
-                            expectation?.fulfill()
-                    }
-                }
-                
-            }
-        }
-    }
-    
     // Nonimal test with room summary: Get the room summary from the background service
     // - Alice and Bob are in an encrypted room
     // - Bob stops their app
@@ -389,7 +274,7 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                                 case .success:
                                     let roomSummary = self.bgSyncService?.roomSummary(forRoomId: roomId)
                                     XCTAssertNotNil(roomSummary, "Room summary should be fetched")
-                                    XCTAssertEqual(roomSummary?.displayname, newName, "Room name change should be reflected")
+                                    XCTAssertEqual(roomSummary?.displayName, newName, "Room name change should be reflected")
                                     expectation?.fulfill()
                                 case .failure(let error):
                                     XCTFail("Cannot fetch the event from background sync service - error: \(error)")
@@ -678,7 +563,7 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                                 self.bgSyncService?.event(withEventId: "aRandomEventId", inRoom: roomId) { _ in
                                     
                                     // -> MXBackgroundSyncService should have detected that the MXSession ran in parallel.
-                                    //    It must have reset its cache. syncResponseStore.prevBatch must not be the same                                    
+                                    //    It must have reset its cache. syncResponseStore.prevBatch must not be the same
                                     XCTAssertNotEqual(syncResponseStoreSyncToken, syncResponseStoreManager.syncToken())
 
                                     expectation?.fulfill()
@@ -763,6 +648,49 @@ class MXBackgroundSyncServiceTests: XCTestCase {
         }
     }
 
+    // MXBackgroundSyncService must not affect file storage when event stream token is missing
+    // - Alice and Bob are in an encrypted room
+    // - Alice sends a message
+    // - Bob uses the MXBackgroundSyncService to fetch it
+    // -> MXBackgroundSyncService must fail without clearing Bob's file store
+    func testFileStoreEffect() {
+        createStoreScenario(messageCountChunks: [1]) { (aliceSession, bobSession, bobBgSyncService, roomId, eventIdsChunks, expectation) in
+
+            //  clear Bob's store
+            bobSession.store.deleteAllData()
+
+            //  store mock event to Bob's store
+            guard let mockEvent = MXEvent(fromJSON: [
+                "event_id": "mock_event_id",
+                "room_id": "mock_room_id",
+                "type": kMXEventTypeStringRoomMessage,
+                "content": [
+                    kMXMessageTypeKey: kMXMessageTypeText,
+                    kMXMessageBodyKey: "text"
+                ]
+            ]) else {
+                XCTFail("Failed to setup initial conditions")
+                expectation.fulfill()
+                return
+            }
+            bobSession.store.storeEvent(forRoom: mockEvent.roomId,
+                                        event: mockEvent,
+                                        direction: .forwards)
+
+            //  run bg sync service for a random event
+            bobBgSyncService.event(withEventId: "any", inRoom: mockEvent.roomId) { response in
+                switch response {
+                case .success:
+                    XCTFail("Should not success fetching the event")
+                case .failure:
+                    //  check that Bob's store still has the mock event
+                    XCTAssertNotNil(bobSession.store.event(withEventId:mockEvent.eventId,
+                                                           inRoom:mockEvent.roomId), "Bob's store must still have the mock event")
+                    expectation.fulfill()
+                }
+            }
+        }
+    }
     
     // MARK: - Cache tests
     
@@ -868,15 +796,18 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                 XCTAssertNotNil(bobSession.store.event(withEventId: lastEventId, inRoom: roomId))
                 
                 // -> Bob session must have the key to decrypt the first message
-                bobSession.event(withEventId: firstEventId, inRoom: roomId) { (event) in
-                    XCTAssertNotNil(event?.clear)
-                    
-                    // -> The background service cache must be reset after session resume
-                    XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
-                    expectation.fulfill()
-                } failure: { (error) in
-                    XCTFail("The request should not fail - Error: \(String(describing: error))");
-                    expectation.fulfill()
+                bobSession.event(withEventId: firstEventId, inRoom: roomId) { response in
+                    switch response {
+                    case .success(let event):
+                        XCTAssertNotNil(event.clear)
+
+                        // -> The background service cache must be reset after session resume
+                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                        expectation.fulfill()
+                    case .failure(let error):
+                        XCTFail("The request should not fail - Error: \(String(describing: error))");
+                        expectation.fulfill()
+                    }
                 }
             })
         }
@@ -939,15 +870,18 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                 XCTAssertNotNil(bobSession.store.event(withEventId: lastEventId, inRoom: roomId))
                 
                 // -> Bob session must have the key to decrypt the first message
-                bobSession.event(withEventId: firstEventId, inRoom: roomId) { (event) in
-                    XCTAssertNotNil(event?.clear)
-                    
-                    // -> The background service cache must be reset after session resume
-                    XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
-                    expectation.fulfill()
-                } failure: { (error) in
-                    XCTFail("The request should not fail - Error: \(String(describing: error))");
-                    expectation.fulfill()
+                bobSession.event(withEventId: firstEventId, inRoom: roomId) { response in
+                    switch response {
+                    case .success(let event):
+                        XCTAssertNotNil(event.clear)
+
+                        // -> The background service cache must be reset after session resume
+                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                        expectation.fulfill()
+                    case .failure(let error):
+                        XCTFail("The request should not fail - Error: \(String(describing: error))");
+                        expectation.fulfill()
+                    }
                 }
             })
         }
@@ -1004,15 +938,18 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                 XCTAssertNotNil(bobSession.store.event(withEventId: lastEventId, inRoom: roomId))
                 
                 // -> Bob session must have the key to decrypt the first message
-                bobSession.event(withEventId: firstEventId, inRoom: roomId) { (event) in
-                    XCTAssertNotNil(event?.clear)
-                    
-                    // -> The background service cache must be reset after session resume
-                    XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
-                    expectation.fulfill()
-                } failure: { (error) in
-                    XCTFail("The request should not fail - Error: \(String(describing: error))");
-                    expectation.fulfill()
+                bobSession.event(withEventId: firstEventId, inRoom: roomId) { response in
+                    switch response {
+                    case .success(let event):
+                        XCTAssertNotNil(event.clear)
+
+                        // -> The background service cache must be reset after session resume
+                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                        expectation.fulfill()
+                    case .failure(let error):
+                        XCTFail("The request should not fail - Error: \(String(describing: error))");
+                        expectation.fulfill()
+                    }
                 }
             })
         }
@@ -1075,17 +1012,156 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                 XCTAssertNotNil(bobSession.store.event(withEventId: lastEventId, inRoom: roomId))
                 
                 // -> Bob session must have the key to decrypt the first message
-                bobSession.event(withEventId: firstEventId, inRoom: roomId) { (event) in
-                    XCTAssertNotNil(event?.clear)
-                    
-                    // -> The background service cache must be reset after session resume
-                    XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
-                    expectation.fulfill()
-                } failure: { (error) in
-                    XCTFail("The request should not fail - Error: \(String(describing: error))");
-                    expectation.fulfill()
+                bobSession.event(withEventId: firstEventId, inRoom: roomId) { response in
+                    switch response {
+                    case .success(let event):
+                        XCTAssertNotNil(event.clear)
+
+                        // -> The background service cache must be reset after session resume
+                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                        expectation.fulfill()
+                    case .failure(let error):
+                        XCTFail("The request should not fail - Error: \(String(describing: error))");
+                        expectation.fulfill()
+                    }
                 }
             })
+        }
+    }
+
+    // Test sync response cache and timeline events with outdated and gappy sync responses.
+    //
+    // - Have Bob background service cache filled with a normal sync response
+    // -> Generate a to-device event from Alice for Bob
+    // -> Mark Bob's data outdated
+    // -> Have a gappy sync for Bob
+    // -> Generate another to-device event from Alice for Bob
+    // -> Have another gappy sync for Bob
+    // -> Mark Bob's data outdated again
+    // -> Bob's cached data must be there after an outdate
+    // - Resume Bob session
+    // -> Sync response cache should persist at least 2 to-device events
+    // -> Sync response cache should have only 10 timeline events (should discard old timeline events and only keep the last one)
+    // - Resume Bob session
+    // -> Room store must be flushed
+    // -> Room pagination token must be stored
+    // -> Room store must contain the last 10 events only
+    // - Make a backwards pagination in the room
+    // -> Timeline should fetch all events without a gap
+    // -> All timeline events should be decrypted
+    // -> The background service cache must be reset after session resume
+    func testStoreWithGappyAndOutdatedSync() {
+        self.createStoreScenario(messageCountChunks: [1]) { aliceSession, bobSession, bobBgSyncService, roomId, eventIdsChunks, expectation in
+            guard let firstEventId = eventIdsChunks.first?.first,
+                let aliceRoom = aliceSession.room(withRoomId: roomId) else {
+                XCTFail("Cannot set up initial test conditions")
+                expectation.fulfill()
+                return
+            }
+
+            let syncResponseStore = MXSyncResponseFileStore(withCredentials: bobSession.credentials)
+            let syncResponseStoreManager = MXSyncResponseStoreManager(syncResponseStore: syncResponseStore)
+
+            self.addToDeviceEventToStore(of: bobBgSyncService, otherSession: aliceSession, roomId: roomId) { responseToDevice in
+                switch responseToDevice {
+                case .success:
+                    syncResponseStoreManager.markDataOutdated()
+
+                    self.fillStore(of: bobBgSyncService, room: aliceRoom, messageCount: Constants.numberOfMessagesForLimitedTest) { _ in
+                        self.addToDeviceEventToStore(of: bobBgSyncService, otherSession: aliceSession, roomId: roomId) { responseToDevice2 in
+                            switch responseToDevice2 {
+                            case .success:
+                                self.fillStore(of: bobBgSyncService, room: aliceRoom, messageCount: Constants.numberOfMessagesForLimitedTest) { _ in
+
+                                    // -> There must be only 1 (merged) cached sync response
+                                    XCTAssertEqual(syncResponseStore.syncResponseIds.count, 1)
+
+                                    guard let firstCachedSyncResponse = syncResponseStoreManager.firstSyncResponse() else {
+                                        XCTFail("Cannot set up initial test conditions")
+                                        expectation.fulfill()
+                                        return
+                                    }
+
+                                    XCTAssertGreaterThanOrEqual(firstCachedSyncResponse.syncResponse.toDevice!.events.count, 2)
+                                    let timelineOld = firstCachedSyncResponse.syncResponse.rooms!.join![roomId]!.timeline
+                                    XCTAssertEqual(timelineOld.events.count, 10)
+                                    XCTAssertTrue(timelineOld.limited)
+                                    XCTAssertNotNil(timelineOld.prevBatch)
+
+                                    syncResponseStoreManager.markDataOutdated()
+
+                                    guard let outdatedCachedSyncResponseId = syncResponseStore.outdatedSyncResponseIds.last,
+                                          let outdatedCachedSyncResponse = try? syncResponseStore.syncResponse(withId: outdatedCachedSyncResponseId) else {
+                                        XCTFail("Cannot set up initial test conditions")
+                                        expectation.fulfill()
+                                        return
+                                    }
+
+                                    //  check that when outdated, data still in the cache
+                                    XCTAssertGreaterThanOrEqual(outdatedCachedSyncResponse.syncResponse.toDevice!.events.count, 2)
+                                    let timelineNew = outdatedCachedSyncResponse.syncResponse.rooms!.join![roomId]!.timeline
+                                    XCTAssertEqual(timelineNew.events.count, 10)
+                                    XCTAssertTrue(timelineNew.limited)
+                                    XCTAssertNotNil(timelineNew.prevBatch)
+
+                                    var roomStoreFlushed = false
+
+                                    NotificationCenter.default.addObserver(forName: .mxRoomDidFlushData, object: nil, queue: .main) { _ in
+                                        roomStoreFlushed = true
+                                    }
+
+                                    bobSession.resume {
+                                        XCTAssertTrue(roomStoreFlushed)
+                                        XCTAssertEqual(timelineNew.prevBatch, bobSession.store!.paginationToken(ofRoom: roomId))
+                                        XCTAssertEqual(bobSession.store!.messagesEnumerator(forRoom: roomId).remaining, 10)
+
+                                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                                        XCTAssertEqual(syncResponseStore.outdatedSyncResponseIds.count, 0)
+
+                                        guard let bobRoom = bobSession.room(withRoomId: roomId) else {
+                                            XCTFail("Cannot set up initial test conditions")
+                                            expectation.fulfill()
+                                            return
+                                        }
+
+                                        bobRoom.liveTimeline { timeline in
+                                            timeline?.resetPagination()
+
+                                            var eventsListened: [MXEvent] = []
+
+                                            _ = timeline?.listenToEvents { event, direction, roomState in
+                                                eventsListened.append(event)
+                                            }
+                                            let numberOfEvents = 2*Constants.numberOfMessagesForLimitedTest + 1
+                                            timeline?.paginate(UInt(numberOfEvents), direction: .backwards, onlyFromStore: false, completion: { response in
+                                                //  check all events fetched
+                                                XCTAssertEqual(eventsListened.count, numberOfEvents)
+                                                XCTAssertTrue(eventsListened.contains(where: { $0.eventId == firstEventId }))
+
+                                                //  check all events decrypted
+                                                for event in eventsListened {
+                                                    if event.isEncrypted && event.clear == nil {
+                                                        XCTFail("Event not decrypted")
+                                                    }
+                                                }
+                                                expectation.fulfill()
+                                            })
+                                        }
+                                    }
+                                }
+                            case .failure(let error):
+                                XCTFail("Cannot set up initial test conditions - error: \(error)")
+                                expectation.fulfill()
+                                return
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    XCTFail("Cannot set up initial test conditions - error: \(error)")
+                    expectation.fulfill()
+                    return
+                }
+            }
         }
     }
     
@@ -1258,22 +1334,27 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                     bobSession.resume {
                         
                         // -> Bob session must have the key to decrypt the first and the last message
-                        bobSession.event(withEventId: firstEventId, inRoom: roomId) { (firstEvent) in
-                            bobSession.event(withEventId: lastEventId, inRoom: roomId) { (lastEvent) in
-                                XCTAssertNotNil(firstEvent?.clear)
-                                XCTAssertNotNil(lastEvent?.clear)
-                                
-                                // -> The background service cache must be reset after session restart
-                                XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
-                                expectation.fulfill()
-                                
-                            } failure: { (error) in
+                        bobSession.event(withEventId: firstEventId, inRoom: roomId) { firstResponse in
+                            switch firstResponse {
+                            case .success(let firstEvent):
+                                bobSession.event(withEventId: lastEventId, inRoom: roomId) { lastResponse in
+                                    switch lastResponse {
+                                    case .success(let lastEvent):
+                                        XCTAssertNotNil(firstEvent.clear)
+                                        XCTAssertNotNil(lastEvent.clear)
+
+                                        // -> The background service cache must be reset after session restart
+                                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                                        expectation.fulfill()
+                                    case .failure(let error):
+                                        XCTFail("The request should not fail - Error: \(String(describing: error))");
+                                        expectation.fulfill()
+                                    }
+                                }
+                            case .failure(let error):
                                 XCTFail("The request should not fail - Error: \(String(describing: error))");
                                 expectation.fulfill()
                             }
-                        } failure: { (error) in
-                            XCTFail("The request should not fail - Error: \(String(describing: error))");
-                            expectation.fulfill()
                         }
                     }
                 }
@@ -1323,23 +1404,29 @@ class MXBackgroundSyncServiceTests: XCTestCase {
                     bobSession2.start(completion: { (_) in
                         
                         // -> Bob session must have the key to decrypt the first and the last message
-                        bobSession2.event(withEventId: firstEventId, inRoom: roomId) { (firstEvent) in
-                            bobSession2.event(withEventId: lastEventId, inRoom: roomId) { (lastEvent) in
-                                XCTAssertNotNil(firstEvent?.clear)
-                                XCTAssertNotNil(lastEvent?.clear)
-                                
-                                // -> The background service cache must be reset after session restart
-                                let syncResponseStore = MXSyncResponseFileStore(withCredentials: bobCredentials)
-                                XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
-                                expectation.fulfill()
-                                
-                            } failure: { (error) in
+                        bobSession2.event(withEventId: firstEventId, inRoom: roomId) { firstResponse in
+                            switch firstResponse {
+                            case .success(let firstEvent):
+                                bobSession2.event(withEventId: lastEventId, inRoom: roomId) { lastResponse in
+                                    switch lastResponse {
+                                    case .success(let lastEvent):
+                                        XCTAssertNotNil(firstEvent.clear)
+                                        XCTAssertNotNil(lastEvent.clear)
+
+                                        // -> The background service cache must be reset after session restart
+                                        let syncResponseStore = MXSyncResponseFileStore(withCredentials: bobCredentials)
+                                        XCTAssertEqual(syncResponseStore.syncResponseIds.count, 0)
+                                        expectation.fulfill()
+                                    case .failure(let error):
+                                        XCTFail("The request should not fail - Error: \(String(describing: error))");
+                                        expectation.fulfill()
+                                    }
+
+                                }
+                            case .failure(let error):
                                 XCTFail("The request should not fail - Error: \(String(describing: error))");
                                 expectation.fulfill()
                             }
-                        } failure: { (error) in
-                            XCTFail("The request should not fail - Error: \(String(describing: error))");
-                            expectation.fulfill()
                         }
                     })
                 })
@@ -1432,19 +1519,21 @@ extension MXBackgroundSyncServiceTests {
 
             } failure: { (error) in
                 XCTFail("Cannot set up initial test conditions")
-                completion(.failure(error ?? MXBackgroundSyncServiceError.unknown))
+                completion(.failure(error))
             }
         }
     }
 }
 
-private extension MXRoom {
+extension MXRoom {
     
     /// Send multiple text messages. If any of sending operations is failed, returns immediately with the error. Otherwise waits for all messages to be sent before calling the completion handler.
     /// - Parameters:
     ///   - messages: Messages to be sent
     ///   - completion: Completion block
-    func sendTextMessages(messages: [String], completion: @escaping (MXResponse<[String]>) -> Void) {
+    func sendTextMessages(messages: [String],
+                          threadId: String? = nil,
+                          completion: @escaping (MXResponse<[String]>) -> Void) {
         let dispatchGroup = DispatchGroup()
         var eventIDs: [String] = []
         var failed = false
@@ -1452,7 +1541,7 @@ private extension MXRoom {
         for message in messages {
             dispatchGroup.enter()
             var localEcho: MXEvent?
-            sendTextMessage(message, localEcho: &localEcho) { (response) in
+            sendTextMessage(message, threadId: threadId, localEcho: &localEcho) { (response) in
                 switch response {
                 case .success(let eventId):
                     if let eventId = eventId {

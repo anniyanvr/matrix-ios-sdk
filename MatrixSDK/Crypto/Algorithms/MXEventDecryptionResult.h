@@ -17,6 +17,8 @@
 
 #import <Foundation/Foundation.h>
 
+@class MXEventDecryptionDecoration;
+
 /**
  The result of a (successful) call to decryptEvent.
  */
@@ -44,6 +46,11 @@
  claimedEd25519Key. See MXEvent.forwardingCurve25519KeyChain.
  */
 @property NSArray<NSString *> *forwardingCurve25519KeyChain;
+
+/**
+ Decoration representing the authenticity of the decrypted message
+ */
+@property (nonatomic, strong) MXEventDecryptionDecoration *decoration;
 
 /**
  If any, the error that occured during decryption.

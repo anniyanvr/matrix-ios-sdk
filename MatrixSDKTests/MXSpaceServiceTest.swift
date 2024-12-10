@@ -32,12 +32,16 @@ class MXSpaceServiceTest: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
-        testData = MatrixSDKTestsData()
+       try super.setUpWithError()
+        
+         testData = MatrixSDKTestsData()
     }
 
     override func tearDownWithError() throws {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
         testData = nil
+        
+        try super.tearDownWithError()
     }
     
     // MARK: - Private
@@ -61,8 +65,9 @@ class MXSpaceServiceTest: XCTestCase {
         for spaceName in spaceNames {
             
             dispatchGroup.enter()
+            let alias = "\(MXTools.validAliasLocalPart(from: spaceName))-\(NSUUID().uuidString)"
             
-            spaceService.createSpace(withName: spaceName, topic: nil, isPublic: true) { (response) in
+            spaceService.createSpace(withName: spaceName, topic: nil, isPublic: true, aliasLocalPart: alias, inviteArray: nil) { (response) in
                                 
                 switch response {
                 case .success(let space):
@@ -151,7 +156,7 @@ class MXSpaceServiceTest: XCTestCase {
                             return
                         }
                         
-                        XCTAssert(roomState.powerLevels.eventsDefault == 100)
+                        XCTAssertNil(roomState.powerLevels)
                                                 
                         expectation.fulfill()
                     }
@@ -173,11 +178,12 @@ class MXSpaceServiceTest: XCTestCase {
         // Create Bob and setup Bob session
         self.doSpaceServiceTestWithBob(testCase: self) { (spaceService, _, expectation) in
             
-            let expectedSpaceName = "Space name"
+            let expectedSpaceName = "mxSpace \(NSUUID().uuidString)"
             let expectedSpaceTopic = "Space topic"
+            let alias = MXTools.validAliasLocalPart(from: expectedSpaceName)
             
             // Create a public space
-            spaceService.createSpace(withName: expectedSpaceName, topic: expectedSpaceTopic, isPublic: true) { (response) in
+            spaceService.createSpace(withName: expectedSpaceName, topic: expectedSpaceTopic, isPublic: true, aliasLocalPart: alias, inviteArray: nil) { (response) in
                 switch response {
                 case .success(let space):
                     
@@ -190,7 +196,7 @@ class MXSpaceServiceTest: XCTestCase {
                         
                         XCTAssertTrue(summary.roomType == .space)
                         XCTAssert(summary.membersCount.members == 1, "Bob must be the only one")
-                        XCTAssertTrue(summary.displayname == expectedSpaceName)
+                        XCTAssertTrue(summary.displayName == expectedSpaceName)
                         XCTAssertTrue(summary.topic == expectedSpaceTopic)
                                             
                         guard let room = space.room else {
@@ -246,40 +252,36 @@ class MXSpaceServiceTest: XCTestCase {
                     let rootSpace = spaces[0]
                     let childSpace = spaces[1]
                     
+                    let _ = session.listenToEvents([.spaceChild]) { event, direction, customObject in
+                        guard let foundRootSpace = spaceService.getSpace(withId: rootSpace.spaceId) else {
+                            XCTFail("Fail to found the root space")
+                            expectation.fulfill()
+                            return
+                        }
+                        
+                        guard let room = foundRootSpace.room else {
+                            XCTFail("Space should have a room")
+                            expectation.fulfill()
+                            return
+                        }
+                        
+                        // Check if space A contains the space child state event for space B
+                        room.state({ (roomState) in
+
+                            let stateEvent = roomState?.stateEvents(with: .spaceChild)?.first
+
+                            XCTAssert(stateEvent?.stateKey == childSpace.spaceId)
+
+                            expectation.fulfill()
+                        })
+                    }
+                    
                     // Add space A as child of space B
                     rootSpace.addChild(roomId: childSpace.spaceId) { (response) in
                         switch response {
                         case .success:
-                            
-                            // Make an initial sync and and get the root space A
-                            session.start { (response) in
-                                switch response {
-                                case .success:
-                                    
-                                    guard let foundRootSpace = spaceService.getSpace(withId: rootSpace.spaceId) else {
-                                        XCTFail("Fail to found the root space")
-                                        return
-                                    }
-                                    
-                                    guard let room = foundRootSpace.room else {
-                                        XCTFail("Space should have a room")
-                                        return
-                                    }
-                                    
-                                    // Check if space A contains the space child state event for space B
-                                    room.state({ (roomState) in
-                                        
-                                        let stateEvent = roomState?.stateEvents(with: .spaceChild)?.first
-                                        
-                                        XCTAssert(stateEvent?.stateKey == childSpace.spaceId)
-                                        
-                                        expectation.fulfill()
-                                    })
-                                case .failure(let error):
-                                    XCTFail("Sync failed with error\(error)")
-                                    expectation.fulfill()
-                                }
-                            }
+                            // rest of the test is handled by the event listener
+                            break
                             
                         case .failure(let error):
                             XCTFail("Add child space failed with error \(error)")
@@ -373,24 +375,24 @@ class MXSpaceServiceTest: XCTestCase {
                     dispatchGroup.notify(queue: .main) {
                                                                         
                         // Get space children of B node
-                        spaceService.getSpaceChildrenForSpace(withId: spaceB.spaceId, suggestedOnly: false, limit: nil) { response in
+                        spaceService.getSpaceChildrenForSpace(withId: spaceB.spaceId, suggestedOnly: false, limit: nil, maxDepth: nil, paginationToken: nil) { response in
                             XCTAssertTrue(Thread.isMainThread)
                             
                             switch response {
                             case .success(let spaceChildrenSummary):
 
-                                XCTAssert(spaceChildrenSummary.spaceSummary.displayname == spaceB.summary?.displayname)
+                                XCTAssert(spaceChildrenSummary.spaceInfo?.displayName == spaceB.summary?.displayName)
 
                                 let childInfos = spaceChildrenSummary.childInfos
 
                                 XCTAssert(childInfos.count == 2)
 
                                 let childInfoSpaceC = childInfos.first { (childInfo) -> Bool in
-                                    childInfo.name == spaceC.summary?.displayname
+                                    childInfo.name == spaceC.summary?.displayName
                                 }
 
                                 let childInfoSpaceD = childInfos.first { (childInfo) -> Bool in
-                                    childInfo.name == spaceD.summary?.displayname
+                                    childInfo.name == spaceD.summary?.displayName
                                 }
 
                                 XCTAssertNotNil(childInfoSpaceC)

@@ -24,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString *const MXRoomLastMessageDataType;
 
 @class MXEvent;
+@class MXRoomLastMessageMO;
 
 /**
  `MXRoomLastMessage` is a model class to store some lastMessage properties for room summary objects.
@@ -51,6 +52,11 @@ FOUNDATION_EXPORT NSString *const MXRoomLastMessageDataType;
 @property (nonatomic, assign, readonly) BOOL isEncrypted;
 
 /**
+ Indicates if the last message failed to be decrypted.
+ */
+@property (nonatomic, assign, readonly) BOOL hasDecryptionError;
+
+/**
  Sender of the last message.
  */
 @property (nonatomic, copy, readonly) NSString *sender;
@@ -67,6 +73,19 @@ FOUNDATION_EXPORT NSString *const MXRoomLastMessageDataType;
 @property (nonatomic, strong, nullable) NSMutableDictionary<NSString*, id<NSCoding>> *others;
 
 - (instancetype)initWithEvent:(MXEvent *)event;
+
+/**
+ Returns an archived (possibly encrypted) version of MXRoomLastMessage sensitive data.
+ These include:
+ - `text`
+ - `attributedText`
+ - `others`
+ */
+- (nullable NSData*)sensitiveData;
+
+#pragma mark - CoreData Model
+
+- (instancetype)initWithManagedObject:(MXRoomLastMessageMO *)model;
 
 - (NSComparisonResult)compareOriginServerTs:(MXRoomLastMessage *)otherMessage;
 

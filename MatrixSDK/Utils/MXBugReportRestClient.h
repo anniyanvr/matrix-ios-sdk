@@ -15,6 +15,9 @@
  */
 
 #import <Foundation/Foundation.h>
+#import "MXWarnings.h"
+
+MX_ASSUME_MISSING_NULLABILITY_BEGIN
 
 /**
  Call states.
@@ -51,7 +54,7 @@ typedef enum : NSUInteger
  @param bugReportEndpoint the endpoint URL.
  @return a MXBugReportRestClient instance.
  */
-- (instancetype)initWithBugReportEndpoint:(NSString *)bugReportEndpoint;
+- (nonnull instancetype)initWithBugReportEndpoint:(NSString *)bugReportEndpoint;
 
 /**
  Send a bug report.
@@ -74,7 +77,7 @@ typedef enum : NSUInteger
             sendFiles:(NSArray<NSURL*>*)files
    attachGitHubLabels:(NSArray<NSString*>*)gitHubLabels
              progress:(void (^)(MXBugReportState state, NSProgress *progress))progress
-              success:(void (^)(void))success
+              success:(void (^)(NSString *reportUrl))success
               failure:(void (^)(NSError *error))failure;
 
 /**
@@ -123,3 +126,5 @@ typedef enum : NSUInteger
 @property (nonatomic) NSDictionary<NSString*, NSString*> *others;
 
 @end
+
+MX_ASSUME_MISSING_NULLABILITY_END

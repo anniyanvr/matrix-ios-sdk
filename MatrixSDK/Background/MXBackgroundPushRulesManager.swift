@@ -42,7 +42,9 @@ import Foundation
                 }
             }
             
-            flatRules = tmpRules
+            // vector-im/element-ios/issues/7636
+            // Intentionally disable new backend push rules as they're not handle properly and break notification sounds
+            flatRules = tmpRules.filter { $0.ruleId != ".m.rule.is_user_mention" && $0.ruleId != ".m.rule.is_room_mention" }
         }
     }
     private var flatRules: [MXPushRule] = []
@@ -51,7 +53,7 @@ import Foundation
     private var permissionConditionChecker: MXPushRuleSenderNotificationPermissionConditionChecker
     
     /// Initializer.
-    /// - Parameter restClient: Rest client to fetch initial push rules.
+    /// - Parameter credentials: Credentials to use when fetching initial push rules.
     public init(withCredentials credentials: MXCredentials) {
         self.credentials = credentials
         eventMatchConditionChecker = MXPushRuleEventMatchConditionChecker()
@@ -82,6 +84,12 @@ import Foundation
             return false
         }
         
+        // Support for MSC3987: The dont_notify push rule action is deprecated.
+        if rule.actions.isEmpty {
+            return rule.enabled
+        }
+        
+        // Compatibility support.
         for ruleAction in rule.actions {
             guard let action = ruleAction as? MXPushRuleAction else { continue }
             if action.actionType == MXPushRuleActionTypeDontNotify {
@@ -115,15 +123,17 @@ import Foundation
             .roomMemberCount: memberCountConditionChecker,
             .senderNotificationPermission: permissionConditionChecker
         ]
-        
-        let eventDictionary = event.jsonDictionary()
+        // getting the unencrypted event if present or fallback
+        let eventDictionary = (event.clear ?? event).jsonDictionary()
         let equivalentCondition = MXPushRuleCondition()
         
         for rule in flatRules.filter({ $0.enabled }) {
             var conditionsOk: Bool = true
             var runEquivalent: Bool = false
             
-            guard let kind = MXPushRuleKind(identifier: rule.kind) else { continue }
+            guard let kind = MXPushRuleKind(identifier: rule.kind) else {
+                continue
+            }
             
             switch kind {
             case .override, .underride:

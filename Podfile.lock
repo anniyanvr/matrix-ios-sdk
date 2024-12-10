@@ -14,8 +14,9 @@ PODS:
   - AFNetworking/Serialization (4.0.1)
   - AFNetworking/UIKit (4.0.1):
     - AFNetworking/NSURLSession
-  - GZIP (1.3.0)
+  - GZIP (1.3.2)
   - libbase58 (0.1.4)
+  - MatrixSDKCrypto (0.4.3)
   - OHHTTPStubs (9.1.0):
     - OHHTTPStubs/Default (= 9.1.0)
   - OHHTTPStubs/Core (9.1.0)
@@ -29,23 +30,18 @@ PODS:
   - OHHTTPStubs/NSURLSession (9.1.0):
     - OHHTTPStubs/Core
   - OHHTTPStubs/OHPathHelpers (9.1.0)
-  - OLMKit (3.2.5):
-    - OLMKit/olmc (= 3.2.5)
-    - OLMKit/olmcpp (= 3.2.5)
-  - OLMKit/olmc (3.2.5)
-  - OLMKit/olmcpp (3.2.5)
-  - Realm (10.16.0):
-    - Realm/Headers (= 10.16.0)
-  - Realm/Headers (10.16.0)
+  - Realm (10.27.0):
+    - Realm/Headers (= 10.27.0)
+  - Realm/Headers (10.27.0)
   - SwiftyBeaver (1.9.5)
 
 DEPENDENCIES:
   - AFNetworking (~> 4.0.0)
   - GZIP (~> 1.3.0)
   - libbase58 (~> 0.1.4)
+  - MatrixSDKCrypto (= 0.4.3)
   - OHHTTPStubs (~> 9.1.0)
-  - OLMKit (~> 3.2.5)
-  - Realm (= 10.16.0)
+  - Realm (= 10.27.0)
   - SwiftyBeaver (= 1.9.5)
 
 SPEC REPOS:
@@ -53,20 +49,20 @@ SPEC REPOS:
     - AFNetworking
     - GZIP
     - libbase58
+    - MatrixSDKCrypto
     - OHHTTPStubs
-    - OLMKit
     - Realm
     - SwiftyBeaver
 
 SPEC CHECKSUMS:
-  AFNetworking: 7864c38297c79aaca1500c33288e429c3451fdce
-  GZIP: 416858efbe66b41b206895ac6dfd5493200d95b3
+  AFNetworking: 3bd23d814e976cd148d7d44c3ab78017b744cd58
+  GZIP: 3c0abf794bfce8c7cb34ea05a1837752416c8868
   libbase58: 7c040313537b8c44b6e2d15586af8e21f7354efd
+  MatrixSDKCrypto: 27bee960e0e8b3a3039f3f3e93dd2ec88299c77e
   OHHTTPStubs: 90eac6d8f2c18317baeca36698523dc67c513831
-  OLMKit: 9fb4799c4a044dd2c06bda31ec31a12191ad30b5
-  Realm: b6027801398f3743fc222f096faa85281b506e6c
+  Realm: 9ca328bd7e700cc19703799785e37f77d1a130f2
   SwiftyBeaver: 84069991dd5dca07d7069100985badaca7f0ce82
 
-PODFILE CHECKSUM: ea9778919e01b860c6b9fae81f500df82de7ad60
+PODFILE CHECKSUM: a2fe7b4dcd95b04f52989dc47cded48c782c02a4
 
-COCOAPODS: 1.10.1
+COCOAPODS: 1.14.3

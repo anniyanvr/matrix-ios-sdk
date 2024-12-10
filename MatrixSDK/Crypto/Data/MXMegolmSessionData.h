@@ -55,8 +55,26 @@
 @property NSString *sessionKey;
 
 /**
+ Flag indicating whether the history of this room is considered as shared.
+ 
+ This is typically the case if room's `historyVisibility` is set to `world_readable` or `shared`.
+ In this case the keys are allowed to be shared with other users upon invite.
+ */
+@property BOOL sharedHistory;
+
+/**
  The algorithm used.
  */
 @property NSString *algorithm;
+
+/**
+ Flag indicating that this session data is untrusted.
+ */
+@property (getter=isUntrusted) BOOL untrusted;
+
+/**
+ Check the data fields before encryption, to see whether it contains required fields or not.
+ */
+- (BOOL)checkFieldsBeforeEncryption;
 
 @end

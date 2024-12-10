@@ -23,6 +23,7 @@
 #import "MXRoom.h"
 #import "MXSession.h"
 #import "MXRoomNameDefaultStringLocalizer.h"
+#import "MXBeaconInfo.h"
 
 #import "NSArray+MatrixSDK.h"
 
@@ -44,7 +45,9 @@
 
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        updaterPerSession = [[NSMapTable alloc] init];
+        updaterPerSession = [[NSMapTable alloc] initWithKeyOptions:NSPointerFunctionsWeakMemory
+                                                      valueOptions:NSPointerFunctionsWeakMemory
+                                                          capacity:1];
     });
 
     MXRoomSummaryUpdater *updater = [updaterPerSession objectForKey:mxSession];
@@ -101,6 +104,11 @@
         // Do not display update events in the summary
         return NO;
     }
+    else if (event.isInThread)
+    {
+        // do not display thread events in the summary
+        return NO;
+    }
 
     // Accept redacted event only if configured
     if (_ignoreRedactedEvent && event.isRedactedEvent)
@@ -111,12 +119,16 @@
     BOOL updated = NO;
 
     // Accept event which type is in the filter list
-    if (event.eventId && (_lastMessageEventTypesAllowList == nil || [_lastMessageEventTypesAllowList containsObject:event.type]))
+    // Only accept membership join or invite from current user but not profile changes
+    // TODO: Add a flag if needed to configure membership event filtering 
+    if (event.eventId 
+        && [self isEventTypeAllowedAsLastMessage:event.type]
+        && (event.eventType != MXEventTypeRoomMember || [self isMembershipEventAllowedAsLastMessage:event forUserId:session.myUserId]))
     {
         [summary updateLastMessage:[[MXRoomLastMessage alloc] initWithEvent:event]];
         updated = YES;
     }
-    else if ([event.type isEqualToString:kRoomIsVirtualJSONKey])
+    else if ([event.type isEqualToString:kRoomIsVirtualJSONKey] && !summary.hiddenFromUser)
     {
         MXVirtualRoomInfo *virtualRoomInfo = [MXVirtualRoomInfo modelFromJSON:event.content];
         if (virtualRoomInfo.isVirtual)
@@ -133,13 +145,15 @@
 {
     BOOL hasRoomMembersChange = NO;
     BOOL updated = NO;
-
+    
+    NSMutableSet<NSString*>* userIdsSharingLiveBeacon = [summary.userIdsSharingLiveBeacon mutableCopy] ?: [NSMutableSet new] ;
+    
     for (MXEvent *event in stateEvents)
     {
         switch (event.eventType)
         {
             case MXEventTypeRoomName:
-                summary.displayname = roomState.name;
+                summary.displayName = roomState.name;
                 updated = YES;
                 break;
 
@@ -172,7 +186,7 @@
                 // If m.room.canonical_alias is set, use it if there is no m.room.name
                 if (!roomState.name && roomState.canonicalAlias)
                 {
-                    summary.displayname = roomState.canonicalAlias;
+                    summary.displayName = roomState.canonicalAlias;
                     updated = YES;
                 }
                 //  If canonicalAlias is set, add it to the aliases array
@@ -216,17 +230,36 @@
                 
                 summary.roomTypeString = roomTypeString;
                 summary.roomType = [self.roomTypeMapper roomTypeFrom:roomTypeString];
-                summary.hiddenFromUser = [self shouldHideRoomWithRoomTypeString:roomTypeString];
+                                
+                if (!summary.hiddenFromUser && [self shouldHideRoomWithRoomTypeString:roomTypeString])
+                {
+                    summary.hiddenFromUser = YES;
+                }
                 
                 updated = YES;
                 [self checkRoomCreateStateEventPredecessorAndUpdateObsoleteRoomSummaryIfNeededWithCreateContent:createContent summary:summary session:session roomState:roomState];
                 [self checkRoomIsVirtualWithCreateEvent:event summary:summary session:session];
-            }
-                break;
                 
+                break;
+            }
+
+            case MXEventTypeBeaconInfo:
+            {
+                [self updateUserIdsSharingLiveBeacon:userIdsSharingLiveBeacon withStateEvent:event];
+                break;
+            }
+            case MXEventTypeRoomHistoryVisibility:
+                summary.historyVisibility = roomState.historyVisibility;
+                break;
             default:
                 break;
         }
+    }
+    
+    if (![userIdsSharingLiveBeacon isEqualToSet:summary.userIdsSharingLiveBeacon])
+    {
+        summary.userIdsSharingLiveBeacon = userIdsSharingLiveBeacon;
+        updated = YES;
     }
 
     if (hasRoomMembersChange)
@@ -265,6 +298,23 @@
         updated = [self session:session updateRoomSummary:summary withServerRoomSummary:nil roomState:roomState];
     }
 
+    NSUInteger memberCount = roomState.membersCount.members;
+    if (memberCount > 1
+        && (!summary.displayName || [summary.displayName isEqualToString:_roomNameStringLocalizer.emptyRoom]))
+    {
+        // Data are missing to compute the display name
+        MXLogDebug(@"[MXRoomSummaryUpdater] updateRoomSummary: Computed an unexpected \"Empty Room\" name. memberCount: %@", @(memberCount));
+        summary.displayName = [self fixUnexpectedEmptyRoomDisplayname:memberCount
+                                                              session:session
+                                                            roomState:roomState];
+        updated = YES;
+    }
+
+    if (!summary.avatar)
+    {
+        updated = [self updateSummaryAvatar:summary session:session withServerRoomSummary:nil roomState:roomState];
+    }
+
     return updated;
 }
 
@@ -275,6 +325,12 @@
 // in this case it should be processed when checking the room replacement in `checkRoomCreateStateEventPredecessorAndUpdateObsoleteRoomSummaryIfNeeded:session:room:`.
 - (BOOL)checkForTombStoneStateEventAndUpdateRoomSummaryIfNeeded:(MXRoomSummary*)summary session:(MXSession*)session roomState:(MXRoomState*)roomState
 {
+    // If room is already hidden, do not check if we should hide it
+    if (summary.hiddenFromUser)
+    {
+        return NO;
+    }
+    
     BOOL updated = NO;
     
     MXRoomTombStoneContent *roomTombStoneContent = roomState.tombStoneContent;
@@ -285,8 +341,13 @@
         
         if (replacementRoomSummary)
         {
-            summary.hiddenFromUser = replacementRoomSummary.membership == MXMembershipJoin;
-            updated = YES;
+            BOOL isReplacementRoomJoined = replacementRoomSummary.membership == MXMembershipJoin;
+                        
+            if (isReplacementRoomJoined)
+            {
+                summary.hiddenFromUser = YES;
+                updated = YES;                
+            }
         }
     }
     
@@ -301,12 +362,13 @@
     if (createContent.roomPredecessorInfo)
     {
         MXRoomSummary *obsoleteRoomSummary = [session roomSummaryWithRoomId:createContent.roomPredecessorInfo.roomId];
-     
-        BOOL obsoleteRoomHiddenFromUserFormerValue = obsoleteRoomSummary.hiddenFromUser;
-        obsoleteRoomSummary.hiddenFromUser = summary.membership == MXMembershipJoin; // Hide room predecessor if user joined the new one
         
-        if (obsoleteRoomHiddenFromUserFormerValue != obsoleteRoomSummary.hiddenFromUser)
+        BOOL isRoomJoined = summary.membership == MXMembershipJoin; 
+        
+        // Hide room predecessor if user joined the new one
+        if (isRoomJoined && obsoleteRoomSummary.hiddenFromUser == NO)
         {
+            obsoleteRoomSummary.hiddenFromUser = YES;
             [obsoleteRoomSummary save:YES];
         }
     }
@@ -314,6 +376,12 @@
 
 - (void)checkRoomIsVirtualWithCreateEvent:(MXEvent*)createEvent summary:(MXRoomSummary*)summary session:(MXSession *)session
 {
+    // If room is already hidden, do not check if we should hide it
+    if (summary.hiddenFromUser)
+    {
+        return;
+    }
+    
     MXRoomCreateContent *createContent = [MXRoomCreateContent modelFromJSON:createEvent.content];
     
     if (createContent.virtualRoomInfo.isVirtual && [summary.creatorUserId isEqualToString:createEvent.sender])
@@ -439,14 +507,16 @@
             }
             default:
             {
-                NSString *memberName = [self memberNameFromRoomState:roomState withIdentifier:memberIdentifiers.firstObject];
-                displayName = [_roomNameStringLocalizer moreThanTwoMembers:memberName count:@(memberCount - 2)];
+                if (memberCount > 2)
+                {
+                    NSString *memberName = [self memberNameFromRoomState:roomState withIdentifier:memberIdentifiers.firstObject];
+                    displayName = [_roomNameStringLocalizer moreThanTwoMembers:memberName count:@(memberCount - 2)];
+                }
                 break;
             }
         }
 
-        if (memberCount > 1
-            && (!displayName || [displayName isEqualToString:_roomNameStringLocalizer.emptyRoom]))
+        if (!displayName || [displayName isEqualToString:_roomNameStringLocalizer.emptyRoom])
         {
             // Data are missing to compute the display name
             MXLogDebug(@"[MXRoomSummaryUpdater] updateSummaryDisplayname: Warning: Computed an unexpected \"Empty Room\" name. memberCount: %@", @(memberCount));
@@ -454,9 +524,9 @@
         }
     }
 
-    if (displayName != summary.displayname || ![displayName isEqualToString:summary.displayname])
+    if (displayName != summary.displayName || ![displayName isEqualToString:summary.displayName])
     {
-        summary.displayname = displayName;
+        summary.displayName = displayName;
         return YES;
     }
 
@@ -494,10 +564,23 @@
     switch (memberNames.count)
     {
         case 0:
-            MXLogDebug(@"[MXRoomSummaryUpdater] fixUnexpectedEmptyRoomDisplayname: No luck");
+        {
             displayname = _roomNameStringLocalizer.emptyRoom;
+            NSString *directUserId = [session roomWithRoomId: roomState.roomId].directUserId;
+            if (directUserId != nil && [MXTools isEmailAddress:directUserId])
+            {
+                displayname = directUserId;
+            }
+            else if (roomState.thirdPartyInvites.firstObject.displayname != nil)
+            {
+                displayname = roomState.thirdPartyInvites.firstObject.displayname;
+            }
+            else
+            {
+                MXLogDebug(@"[MXRoomSummaryUpdater] fixUnexpectedEmptyRoomDisplayname: No luck");
+            }
             break;
-
+        }
         case 1:
             if (memberCount == 2)
             {
@@ -707,6 +790,94 @@
 {
     NSString *name = [roomState.members memberName:identifier];
     return (name.length > 0 ? name : identifier);
+}
+
+- (BOOL)isEventTypeAllowedAsLastMessage:(NSString*)eventTypeString
+{
+    if (!self.lastMessageEventTypesAllowList)
+    {
+        return YES;
+    }
+    
+    return [self.lastMessageEventTypesAllowList containsObject:eventTypeString];    
+}
+
+- (BOOL)isEventUserProfileChange:(MXEvent*)event
+{
+    if (event.eventType != MXEventTypeRoomMember)
+    {
+        return NO;
+    }
+        
+    return event.isUserProfileChange;
+}
+
+- (BOOL)isMembershipEventJoinOrInvite:(MXEvent*)event forUserId:(NSString*)userId
+{
+    if (event.eventType != MXEventTypeRoomMember)
+    {
+        return NO;
+    }
+    
+    NSString *eventUserId = event.stateKey;
+        
+    if (![userId isEqualToString:eventUserId])
+    {
+        return NO;
+    }
+    
+    MXRoomMember *roomMember = [[MXRoomMember alloc] initWithMXEvent:event];
+    
+    return roomMember.membership == MXMembershipInvite || roomMember.membership == MXMembershipJoin;    
+}
+
+- (BOOL)isMembershipEventAllowedAsLastMessage:(MXEvent*)event forUserId:(NSString*)userId
+{
+    // Do not handle user profile change
+    if ([self isEventUserProfileChange:event])
+    {
+        return NO;
+    }
+    
+    // Only accept membership join or invite for given user id
+    return [self isMembershipEventJoinOrInvite:event forUserId:userId]; 
+}
+
+#pragma mark Beacon info
+
+- (BOOL)updateUserIdsSharingLiveBeacon:(NSMutableSet<NSString*>*)userIdsSharingLiveBeacon withStateEvent:(MXEvent*)stateEvent
+{
+    MXBeaconInfo *beaconInfo = [[MXBeaconInfo alloc] initWithMXEvent:stateEvent];
+    
+    NSString *userId = beaconInfo.userId;
+    
+    if (!beaconInfo || !userId)
+    {
+        return NO;
+    }
+        
+    BOOL updated = NO;
+    
+    BOOL isUserExist = [userIdsSharingLiveBeacon containsObject:userId];
+    
+    if (beaconInfo.isLive)
+    {
+        if (!isUserExist)
+        {
+            [userIdsSharingLiveBeacon addObject:userId];
+            updated = YES;
+        }
+    }
+    else
+    {
+        if (isUserExist)
+        {
+            [userIdsSharingLiveBeacon removeObject:userId];
+            updated = YES;
+        }
+    }
+    
+    return updated;
 }
 
 @end

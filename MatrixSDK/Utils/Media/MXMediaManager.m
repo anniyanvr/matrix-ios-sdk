@@ -49,12 +49,12 @@ static NSUInteger storageCacheSize = 0;
 
 @implementation MXMediaManager
 
-- (id)initWithHomeServer:(NSString *)homeserverURL
+- (id)initWithRestClient:(MXRestClient *)restClient
 {
     self = [super init];
     if (self)
     {
-        _homeserverURL = homeserverURL;
+        _restClient = restClient;
         _scanManager = nil;
     }
     return self;
@@ -155,6 +155,11 @@ static MXLRUCache* imagesCacheLruCache = nil;
 + (void)cacheImage:(NSImage *)image withCachePath:(NSString *)filePath
 #endif
 {
+    if (!imagesCacheLruCache)
+    {
+        imagesCacheLruCache = [[MXLRUCache alloc] initWithCapacity:20];
+    }
+    
     [imagesCacheLruCache put:filePath object:image];
 }
 
@@ -371,7 +376,11 @@ static MXLRUCache* imagesCacheLruCache = nil;
         }
         else
         {
-            mxMediaPrefix = [NSString stringWithFormat:@"%@/%@/download/", _homeserverURL, kMXContentPrefixPath];
+            mxMediaPrefix = [NSString stringWithFormat:@"%@/%@/download/", _restClient.homeserver, kMXContentPrefixPath];
+            if (_restClient.isUsingAuthenticatedMedia)
+            {
+                mxMediaPrefix = [NSString stringWithFormat:@"%@/%@/download/", _restClient.homeserver, kMXAuthenticatedContentPrefixPath];
+            }
         }
         
         contentURL = [mxContentURI stringByReplacingOccurrencesOfString:kMXContentUriScheme withString:mxMediaPrefix];
@@ -410,7 +419,11 @@ static MXLRUCache* imagesCacheLruCache = nil;
         }
         else
         {
-            mxThumbnailPrefix = [NSString stringWithFormat:@"%@/%@/thumbnail/", _homeserverURL, kMXContentPrefixPath];
+            mxThumbnailPrefix = [NSString stringWithFormat:@"%@/%@/thumbnail/", _restClient.homeserver, kMXContentPrefixPath];
+            if (_restClient.isUsingAuthenticatedMedia)
+            {
+                mxThumbnailPrefix = [NSString stringWithFormat:@"%@/%@/thumbnail/", _restClient.homeserver, kMXAuthenticatedContentPrefixPath];
+            }
         }
         NSString *thumbnailURL = [mxContentURI stringByReplacingOccurrencesOfString:kMXContentUriScheme withString:mxThumbnailPrefix];
         
@@ -442,7 +455,8 @@ static MXLRUCache* imagesCacheLruCache = nil;
 
 - (NSString *)urlOfIdenticon:(NSString *)identiconString
 {
-    return [NSString stringWithFormat:@"%@/%@/identicon/%@", _homeserverURL, kMXContentPrefixPath, [identiconString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLHostAllowedCharacterSet]]];
+    // Deprecated API, not need to use authenticated for this.
+    return [NSString stringWithFormat:@"%@/%@/identicon/%@", _restClient.homeserver, kMXContentPrefixPath, [identiconString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLHostAllowedCharacterSet]]];
 }
 
 
@@ -490,6 +504,7 @@ static MXLRUCache* imagesCacheLruCache = nil;
                                 withData:nil
                            andIdentifier:downloadId
                           saveAtFilePath:filePath
+                             accessToken: _restClient.credentials.accessToken
                              scanManager:_scanManager
                                  success:success
                                  failure:failure];
@@ -530,6 +545,7 @@ static MXLRUCache* imagesCacheLruCache = nil;
                                 withData:nil
                            andIdentifier:downloadId
                           saveAtFilePath:filePath
+                             accessToken: _restClient.credentials.accessToken
                              scanManager:_scanManager
                                  success:success
                                  failure:failure];
@@ -540,6 +556,7 @@ static MXLRUCache* imagesCacheLruCache = nil;
                        withData:(NSDictionary *)data
                   andIdentifier:(NSString *)downloadId
                  saveAtFilePath:(NSString *)filePath
+                    accessToken:(NSString *)accessToken
                     scanManager:(MXScanManager *)scanManager
                         success:(void (^)(NSString *outputFilePath))success
                         failure:(void (^)(NSError *error))failure
@@ -587,7 +604,7 @@ static MXLRUCache* imagesCacheLruCache = nil;
     else
     {
         // Create a media loader to download data
-        mediaLoader = [[MXMediaLoader alloc] init];
+        mediaLoader = [[MXMediaLoader alloc] initWithAccessToken:accessToken];
         // Report this loader
         if (!downloadTable)
         {
@@ -700,6 +717,7 @@ static MXLRUCache* imagesCacheLruCache = nil;
                                 withData:dataToPost
                            andIdentifier:downloadId
                           saveAtFilePath:filePath
+                             accessToken: _restClient.credentials.accessToken
                              scanManager:_scanManager
                                  success:success
                                  failure:failure];

@@ -17,6 +17,15 @@
 
 #import <Foundation/Foundation.h>
 
+#import "MXCallHangupEventContent.h"
+#import "MXTaskProfile.h"
+
+/**
+ Callback function to stop ongoing duration tracking
+ started by `[MXAnalyticsDelegate startDurationTracking]`
+ */
+typedef void (^StopDurationTracking)(void);
+
 NS_ASSUME_NONNULL_BEGIN
 
 /**
@@ -37,22 +46,106 @@ NS_ASSUME_NONNULL_BEGIN
  
  An example is the time to load data from the local store at startup.
  
- @param seconds the duration in seconds.
- @param category the category the task belongs to.
+ @param milliseconds the duration in milliseconds.
  @param name the name of the task.
+ @param units the number of items the were completed during the task
  */
-- (void)trackDuration:(NSTimeInterval)seconds category:(NSString*)category name:(NSString*)name;
+- (void)trackDuration:(NSInteger)milliseconds name:(MXTaskProfileName)name units:(NSUInteger)units;
 
 /**
- Report a value.
+ Start tracking the duration of a task and manually stop when finished using the return handle
  
- An example is the user's room count.
+ @note This method is similar to `trackDuration`, but instead of passing the measured duraction
+       as a parameter, it relies on the implementation of `MXAnalyticsDelegate` to perform the
+       measurements.
  
- @param value the number to report.
- @param category the category the value belongs to.
- @param name the name of the value.
+ @param name Name of the entity being measured (e.g. `RoomsViewController` or `Crypto`)
+ @param operation Short code identifying the type of operation measured (e.g. `viewDidLoad` or `decrypt`)
+
+ 
+ @return Handle that can be used to stop the performance tracking
  */
-- (void)trackValue:(NSNumber*)value category:(NSString*)category name:(NSString*)name;
+- (StopDurationTracking)startDurationTrackingForName:(NSString *)name operation:(NSString *)operation;
+
+/**
+ Report that a call has started.
+ 
+ @param isVideo Whether the call is a video call
+ @param numberOfParticipants The number of participants in the call
+ @param isIncoming Whether the call is an incoming call (NO if placed by the user).
+ */
+- (void)trackCallStartedWithVideo:(BOOL)isVideo numberOfParticipants:(NSInteger)numberOfParticipants incoming:(BOOL)isIncoming;
+
+/**
+ Report that a call has ended.
+ 
+ @param duration The duration of the call in milliseconds
+ @param isVideo Whether the call is a video call
+ @param numberOfParticipants The number of participants in the call
+ @param isIncoming Whether the call is an incoming call (NO if placed by the user).
+ */
+- (void)trackCallEndedWithDuration:(NSInteger)duration video:(BOOL)isVideo numberOfParticipants:(NSInteger)numberOfParticipants incoming:(BOOL)isIncoming;
+
+/**
+ Report that a call encountered an error.
+ 
+ @param reason The call hangup reason.
+ @param isVideo Whether the call is a video call
+ @param numberOfParticipants The number of participants in the call
+ @param isIncoming Whether the call is an incoming call (NO if placed by the user).
+ */
+- (void)trackCallErrorWithReason:(MXCallHangupReason)reason video:(BOOL)isVideo numberOfParticipants:(NSInteger)numberOfParticipants incoming:(BOOL)isIncoming;
+
+/**
+ Report that a room was created.
+ 
+ @param isDM Whether the room is direct or not.
+ */
+- (void)trackCreatedRoomAsDM:(BOOL)isDM;
+
+/**
+ Report that a room was joined.
+ 
+ @param isDM Whether the room is direct or not.
+ @param isSpace Whether the room is a space or not.
+ @param memberCount The number of members in the room.
+ */
+- (void)trackJoinedRoomAsDM:(BOOL)isDM
+                    isSpace:(BOOL)isSpace
+                memberCount:(NSUInteger)memberCount;
+
+/**
+ Report whether the user granted or rejected access to their contacts.
+ 
+ @param granted YES if access was granted, NO if it was rejected.
+ */
+- (void)trackContactsAccessGranted:(BOOL)granted;
+
+#pragma mark - Threads
+
+/**
+ Report that an event composed.
+
+ @param inThread flag indicating the event was sent in a thread
+ @param isEditing flag indicating the event was an edit
+ @param isReply flag indicating the event was a reply
+ @param startsThread flag indicating the event starts a thread
+ */
+- (void)trackComposerEventInThread:(BOOL)inThread
+                         isEditing:(BOOL)isEditing
+                           isReply:(BOOL)isReply
+                      startsThread:(BOOL)startsThread;
+
+#pragma mark - Health metrics
+
+/**
+ Report a non-fatal issue, i.e. an internal error that did not result in a crash
+ 
+ @param issue the description of the issue that occured
+ @param details a dictionary of additional context-dependent details about the issue
+ */
+- (void)trackNonFatalIssue:(NSString *)issue
+                   details:(nullable NSDictionary <NSString *, id> *)details;
 
 @end
 

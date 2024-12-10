@@ -71,7 +71,7 @@
         return nil;
     }
     
-    NSString *messageType = event.content[@"msgtype"];
+    NSString *messageType = event.content[kMXMessageTypeKey];
     
     if (![self.editSupportedMessageTypes containsObject:messageType])
     {
@@ -80,8 +80,8 @@
         return nil;
     }
     
-    NSString *finalText;
-    NSString *finalFormattedText;
+    NSString *compatibilityText;
+    NSString *compatibilityFormattedText;
     
     if (event.isReplyEvent)
     {
@@ -90,60 +90,67 @@
         
         if (replyEventParts)
         {
-            finalText = [NSString stringWithFormat:@"%@%@", replyEventParts.bodyParts.replyTextPrefix, text];
+            compatibilityText = [NSString stringWithFormat:@"%@ * %@", replyEventParts.bodyParts.replyTextPrefix, text];
             NSString *formattedReplyText = formattedText ?: text;
-            finalFormattedText = [NSString stringWithFormat:@"%@%@", replyEventParts.formattedBodyParts.replyTextPrefix, formattedReplyText];
+            if (replyEventParts.formattedBodyParts.replyTextPrefix)
+            {
+                compatibilityFormattedText = [NSString stringWithFormat:@"%@ * %@", replyEventParts.formattedBodyParts.replyTextPrefix, formattedReplyText];
+            }
         }
         else
         {
             MXLogDebug(@"[MXAggregations] replaceTextMessageEvent: Fail to parse reply event: %@", event.eventId);
-            failure(nil);
-            return nil;
+
+            // This enables editing replies that don't provide a fallback mx-reply body.
+            compatibilityText = [NSString stringWithFormat:@"* %@", text];
+            if (formattedText.length > 0)
+            {
+                compatibilityFormattedText = [NSString stringWithFormat:@"* %@", formattedText];
+            }
         }
     }
     else
     {
-        finalText = text;
-        finalFormattedText = formattedText;
+        compatibilityText = [NSString stringWithFormat:@"* %@", text];
+        if (formattedText.length > 0)
+        {
+            compatibilityFormattedText = [NSString stringWithFormat:@"* %@", formattedText];
+        }
     }
     
     NSMutableDictionary *content = [NSMutableDictionary new];
-    NSMutableDictionary *compatibilityContent = [NSMutableDictionary dictionaryWithDictionary:@{
-                                                                                                @"msgtype": messageType,
-                                                                                                @"body": [NSString stringWithFormat:@"* %@", finalText]
-                                                                                                }];
-    
-    NSMutableDictionary *newContent = [NSMutableDictionary dictionaryWithDictionary:@{
-                                                                                      @"msgtype": messageType,
-                                                                                      @"body": finalText
-                                                                                      }];
-    
-    
-    if (finalFormattedText)
+    NSMutableDictionary *compatibilityContent = [NSMutableDictionary dictionaryWithDictionary:@{ kMXMessageTypeKey: messageType,
+                                                                                                 kMXMessageBodyKey: compatibilityText
+                                                                                              }];
+    if (compatibilityFormattedText)
     {
         // Send the HTML formatted string
-        
         [compatibilityContent addEntriesFromDictionary:@{
-                                                         @"formatted_body": [NSString stringWithFormat:@"* %@", finalFormattedText],
-                                                         @"format": kMXRoomMessageFormatHTML
-                                                         }];
-        
-        
+            @"formatted_body": compatibilityFormattedText,
+            @"format": kMXRoomMessageFormatHTML
+        }];
+
+    }
+
+    NSMutableDictionary *newContent = [NSMutableDictionary dictionaryWithDictionary:@{ kMXMessageTypeKey: messageType,
+                                                                                       kMXMessageBodyKey: text }];
+    if (formattedText.length > 0)
+    {
         [newContent addEntriesFromDictionary:@{
-                                               @"formatted_body": finalFormattedText,
-                                               @"format": kMXRoomMessageFormatHTML
-                                               }];
+            @"formatted_body": formattedText,
+            @"format": kMXRoomMessageFormatHTML
+        }];
     }
     
     
     [content addEntriesFromDictionary:compatibilityContent];
     
-    content[@"m.new_content"] = newContent;
+    content[kMXMessageContentKeyNewContent] = newContent;
     
-    content[@"m.relates_to"] = @{
-                                 @"rel_type" : @"m.replace",
-                                 @"event_id": event.eventId
-                                 };
+    content[kMXEventRelationRelatesToKey] = @{
+        kMXEventContentRelatesToKeyRelationType : MXEventRelationTypeReplace,
+        kMXEventContentRelatesToKeyEventId: event.eventId
+    };
     
     MXHTTPOperation *operation;
     MXEvent *localEcho;
@@ -174,13 +181,13 @@
         if (localEchoBlock)
         {
             // Build a temporary local echo
-            localEcho = [room fakeEventWithEventId:nil eventType:kMXEventTypeStringRoomMessage andContent:content];
+            localEcho = [room fakeEventWithEventId:nil eventType:kMXEventTypeStringRoomMessage andContent:content threadId:nil];
             localEcho.sentState = event.sentState;
         }
     }
     else
     {
-        operation = [room sendEventOfType:kMXEventTypeStringRoomMessage content:content localEcho:&localEcho success:success failure:failure];
+        operation = [room sendEventOfType:kMXEventTypeStringRoomMessage content:content threadId:nil localEcho:&localEcho success:success failure:failure];
     }
 
     if (localEchoBlock && localEcho)

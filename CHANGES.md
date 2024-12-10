@@ -1,3 +1,1074 @@
+## Changes in 0.27.17 (2024-12-10)
+
+No significant changes.
+
+
+## Changes in 0.27.16 (2024-11-12)
+
+No significant changes.
+
+
+## Changes in 0.27.15 (2024-10-15)
+
+No significant changes.
+
+
+## Changes in 0.27.14 (2024-09-17)
+
+No significant changes.
+
+
+## Changes in 0.27.13 (2024-08-20)
+
+🙌 Improvements
+
+- Add UTC timestamps to console log lines. ([#7472](https://github.com/vector-im/element-ios/issues/7472))
+
+📄 Documentation
+
+- Drop the requirement for "real" or "legally identifiable" name in order to contribute, in line with updated Foundation policy. ([#1875](https://github.com/matrix-org/matrix-ios-sdk/pull/1875))
+
+
+## Changes in 0.27.12 (2024-07-23)
+
+🙌 Improvements
+
+- Expose MXRroomPowerLevels Swift wrappers to Element ([#1869](https://github.com/matrix-org/matrix-ios-sdk/pull/1869))
+
+🐛 Bugfixes
+
+- Fix CallKit audio session late init in VoIP call. ([#1866](https://github.com/matrix-org/matrix-ios-sdk/pull/1866))
+
+
+## Changes in 0.27.11 (2024-06-18)
+
+No significant changes.
+
+
+## Changes in 0.27.10 (2024-06-17)
+
+No significant changes.
+
+
+## Changes in 0.27.9 (2024-06-13)
+
+No significant changes.
+
+
+## Changes in 0.27.8 (2024-05-29)
+
+🙌 Improvements
+
+- When sorting room list alphabetically, sort it case-insensitive. ([#1851](https://github.com/matrix-org/matrix-ios-sdk/pull/1851))
+- Crypto: Update crypto SDK to 0.4.1 ([#1853](https://github.com/matrix-org/matrix-ios-sdk/pull/1853))
+
+
+## Changes in 0.27.7 (2024-05-01)
+
+No significant changes.
+
+
+## Changes in 0.27.6 (2024-02-07)
+
+No significant changes.
+
+
+## Changes in 0.27.5 (2024-01-09)
+
+🐛 Bugfixes
+
+- Update regex for email address to be aligned email format in RFC 5322 ([#1826](https://github.com/matrix-org/matrix-ios-sdk/pull/1826))
+
+🧱 Build
+
+- Update CocoaPods and other gems. ([#1835](https://github.com/matrix-org/matrix-ios-sdk/pull/1835))
+
+
+## Changes in 0.27.4 (2023-11-28)
+
+🐛 Bugfixes
+
+- Fix unhandled callback when the session is nil. ([#1833](https://github.com/matrix-org/matrix-ios-sdk/pull/1833))
+
+
+## Changes in 0.27.3 (2023-10-04)
+
+🐛 Bugfixes
+
+- Prevent crash when sending file with unrecognised file extension (no associated mime type) (mimetype)
+
+🧱 Build
+
+- Update Cocoapods to 1.13.0. ([#1820](https://github.com/matrix-org/matrix-ios-sdk/pull/1820))
+
+
+## Changes in 0.27.2 (2023-09-12)
+
+🐛 Bugfixes
+
+- Fix | QR code verification failing due to incorrect encoding padding ([#1816](https://github.com/vector-im/element-ios/issues/1816))
+
+
+## Changes in 0.27.1 (2023-08-29)
+
+✨ Features
+
+- Delegate OIDC compatibility flag added. ([#1811](https://github.com/matrix-org/matrix-ios-sdk/pull/1811))
+- Added the authentication property to the well known. ([#1812](https://github.com/matrix-org/matrix-ios-sdk/pull/1812))
+- Function that allows to generate from the well known authentication, a logout mas URL given the device ID. ([#1813](https://github.com/matrix-org/matrix-ios-sdk/pull/1813))
+
+🐛 Bugfixes
+
+- Fixes power level events force unwrap crash ([#1809](https://github.com/matrix-org/matrix-ios-sdk/pull/1809))
+- Prevent keyed archiver encoding crashes when writing read receipts to the file store ([#1810](https://github.com/vector-im/element-ios/issues/1810))
+- Fix incoming push notifications not triggering sounds ([#7636](https://github.com/vector-im/element-ios/issues/7636))
+
+
+## Changes in 0.27.0 (2023-08-15)
+
+✨ Features
+
+- Add support for device hydration through the Crypto SDK (uses MSC3814) ([#1807](https://github.com/matrix-org/matrix-ios-sdk/pull/1807))
+
+🐛 Bugfixes
+
+- Fix parsing logic for legacy location events ([#1801](https://github.com/matrix-org/matrix-ios-sdk/pull/1801))
+
+⚠️ API Changes
+
+- Remove MXDehydrationService and old client methods. ([#1807](https://github.com/matrix-org/matrix-ios-sdk/pull/1807))
+
+
+## Changes in 0.26.12 (2023-06-21)
+
+🐛 Bugfixes
+
+- Ignore push rules with unknown condition kinds ([#7601](https://github.com/vector-im/element-ios/issues/7601))
+
+
+## Changes in 0.26.11 (2023-06-13)
+
+🙌 Improvements
+
+- MSC3912 implementation: the stable property with_relations has been renamed with_rel_types ([#7563](https://github.com/vector-im/element-ios/issues/7563))
+- Updated Jitsi meet sdk to 8.1.2-lite. ([#7565](https://github.com/vector-im/element-ios/issues/7565))
+- MSC3987 implementation: the 'dont_notify' action for a push_rule is now deprecated and replaced by an empty action list. ([#7576](https://github.com/vector-im/element-ios/issues/7576))
+
+🐛 Bugfixes
+
+- Fixes a bug where an unhelpful message is shown rather than the threads empty state. ([#7551](https://github.com/vector-im/element-ios/issues/7551))
+
+
+## Changes in 0.26.10 (2023-05-16)
+
+🙌 Improvements
+
+- Crypto: Enable Crypto SDK by default ([#1770](https://github.com/matrix-org/matrix-ios-sdk/pull/1770))
+- Crypto: Deprecate MXLegacyCrypto ([#1772](https://github.com/matrix-org/matrix-ios-sdk/pull/1772))
+
+🐛 Bugfixes
+
+- Poll: Refreshing the poll when receiving pollEnd can break the chronological order in the store. ([#1776](https://github.com/matrix-org/matrix-ios-sdk/pull/1776))
+- Fix breadcrumb list not updating when leaving a room. Contributed by @JanNikGra. ([#1777](https://github.com/vector-im/element-ios/issues/1777))
+
+
+## Changes in 0.26.9 (2023-04-18)
+
+🐛 Bugfixes
+
+- Cross-signing: Setup cross-signing with empty auth session ([#1774](https://github.com/matrix-org/matrix-ios-sdk/pull/1774))
+
+
+## Changes in 0.26.8 (2023-04-18)
+
+🙌 Improvements
+
+- Crypto: Update Crypto SDK ([#1767](https://github.com/matrix-org/matrix-ios-sdk/pull/1767))
+- Cross-signing: Ensure device signed after restoring cross-signing keys ([#1768](https://github.com/matrix-org/matrix-ios-sdk/pull/1768))
+- Crypto: Remove legacy crypto store ([#1769](https://github.com/matrix-org/matrix-ios-sdk/pull/1769))
+
+
+## Changes in 0.26.7 (2023-04-12)
+
+🙌 Improvements
+
+- Crypto: Upgrade Crypto SDK ([#1765](https://github.com/matrix-org/matrix-ios-sdk/pull/1765))
+
+🐛 Bugfixes
+
+- Crypto: Delete data for mismatched accounts ([#1763](https://github.com/matrix-org/matrix-ios-sdk/pull/1763))
+
+
+## Changes in 0.26.6 (2023-04-04)
+
+🙌 Improvements
+
+- Bugfix: Ensure related event nullability ([#1746](https://github.com/matrix-org/matrix-ios-sdk/pull/1746))
+- Add constants for mention room power levels and check decrypted event content for @room mentions. ([#1750](https://github.com/matrix-org/matrix-ios-sdk/pull/1750))
+- Crypto: Display correct SDK version ([#7457](https://github.com/vector-im/element-ios/issues/7457))
+
+🐛 Bugfixes
+
+- Fix invitations count in all chats list. ([#6871](https://github.com/vector-im/element-ios/issues/6871))
+
+⚠️ API Changes
+
+- Crypto: Add event decryption decoration instead of untrusted property ([#1743](https://github.com/matrix-org/matrix-ios-sdk/pull/1743))
+
+🧱 Build
+
+- Upgrade JitsiMeetSDK to 7.0.1-lite. ([#1754](https://github.com/matrix-org/matrix-ios-sdk/pull/1754))
+
+
+## Changes in 0.26.5 (2023-03-28)
+
+🙌 Improvements
+
+- Crypto: Upgrade verification if necessary ([#1751](https://github.com/matrix-org/matrix-ios-sdk/pull/1751))
+
+
+## Changes in 0.26.4 (2023-03-22)
+
+🐛 Bugfixes
+
+- Crypto: Do not show current session as unverified ([#7446](https://github.com/vector-im/element-ios/issues/7446))
+
+
+## Changes in 0.26.3 (2023-03-22)
+
+No significant changes.
+
+
+## Changes in 0.26.2 (2023-03-21)
+
+🙌 Improvements
+
+- Crypto: Always update tracked users when sharing keys ([#1733](https://github.com/matrix-org/matrix-ios-sdk/pull/1733))
+- CryptoV2: Fully deprecate MXCryptoStore ([#1735](https://github.com/matrix-org/matrix-ios-sdk/pull/1735))
+- Make CallKit maximumCallGroups configurable. ([#1738](https://github.com/matrix-org/matrix-ios-sdk/pull/1738))
+- Crypto: Simplify user verification state ([#1740](https://github.com/matrix-org/matrix-ios-sdk/pull/1740))
+- Rageshakes: Identify crypto module ([#1742](https://github.com/matrix-org/matrix-ios-sdk/pull/1742))
+- Session: Improved session startup progress ([#7417](https://github.com/vector-im/element-ios/issues/7417))
+
+🐛 Bugfixes
+
+- MXCallManager: Make call transfer requests sequential. ([#1739](https://github.com/matrix-org/matrix-ios-sdk/pull/1739))
+
+
+## Changes in 0.26.1 (2023-03-13)
+
+🐛 Bugfixes
+
+- All chats: revert "Unread" rooms filter behaviour. ([#1736](https://github.com/matrix-org/matrix-ios-sdk/pull/1736))
+
+
+## Changes in 0.26.0 (2023-03-07)
+
+🙌 Improvements
+
+- CryptoV2: Control CryptoSDK via feature flag ([#1719](https://github.com/matrix-org/matrix-ios-sdk/pull/1719))
+- Update MatrixSDKCrypto ([#1725](https://github.com/matrix-org/matrix-ios-sdk/pull/1725))
+- Use correct next users with keys query ([#1726](https://github.com/matrix-org/matrix-ios-sdk/pull/1726))
+- Creating a direct room with a third party will now use their email as the m.direct ID and their obfuscated email as the room title. ([#1727](https://github.com/matrix-org/matrix-ios-sdk/pull/1727))
+
+🐛 Bugfixes
+
+- Fixed incorrect filtering of "unread rooms" in the all chats list. ([#1723](https://github.com/matrix-org/matrix-ios-sdk/pull/1723))
+- Unread rooms: Move the storage file to a better location. ([#1730](https://github.com/matrix-org/matrix-ios-sdk/pull/1730))
+- Fixed a crash when roomSummary is nil. ([#1731](https://github.com/matrix-org/matrix-ios-sdk/pull/1731))
+- Fix room list last message when the key comes late. ([#6848](https://github.com/vector-im/element-ios/issues/6848))
+
+⚠️ API Changes
+
+- MXRoomSummary: displayname has been renamed to displayName ([#1731](https://github.com/matrix-org/matrix-ios-sdk/pull/1731))
+
+
+## Changes in 0.25.2 (2023-02-21)
+
+🙌 Improvements
+
+- Polls: add fallback text for poll ended events. ([#1713](https://github.com/matrix-org/matrix-ios-sdk/pull/1713))
+- Push Rules: Apply push rules client side for encrypted rooms, including mentions and keywords. ([#1714](https://github.com/matrix-org/matrix-ios-sdk/pull/1714))
+- Typealias MXResponse to Swift.Result ([#1715](https://github.com/matrix-org/matrix-ios-sdk/pull/1715))
+- CryptoV2: Unify verification event processing ([#1717](https://github.com/matrix-org/matrix-ios-sdk/pull/1717))
+- Encryption: add encryption to rooms' last messages.
+  WARNING: the migration to this database version will cause an initial full sync. ([#1718](https://github.com/matrix-org/matrix-ios-sdk/pull/1718))
+
+🐛 Bugfixes
+
+- Avoid sending a verification cancel request while the session is closed
+  Fix of some retain cycles ([#1716](https://github.com/matrix-org/matrix-ios-sdk/pull/1716))
+- Fix an issue where MXMediaLoader would not start downloading until the end of the scroll. ([#1721](https://github.com/matrix-org/matrix-ios-sdk/pull/1721))
+
+
+## Changes in 0.25.1 (2023-02-07)
+
+✨ Features
+
+- Add mark as unread option for rooms ([#7253](https://github.com/vector-im/element-ios/issues/7253))
+
+🙌 Improvements
+
+- Polls: add more information in PollProtocol for poll history. ([#1691](https://github.com/matrix-org/matrix-ios-sdk/pull/1691))
+- CryptoV2: Decrypt notifications ([#1695](https://github.com/matrix-org/matrix-ios-sdk/pull/1695))
+- CryptoV2: Upload fallback keys ([#1697](https://github.com/matrix-org/matrix-ios-sdk/pull/1697))
+- CryptoV2: Set passphrase for the crypto store ([#1699](https://github.com/matrix-org/matrix-ios-sdk/pull/1699))
+- Backup: Import legacy backup in batches ([#1701](https://github.com/matrix-org/matrix-ios-sdk/pull/1701))
+- Notifications: add completion blocks in the API. ([#1702](https://github.com/matrix-org/matrix-ios-sdk/pull/1702))
+- CryptoV2: New CryptoMachine on each background operation ([#1704](https://github.com/matrix-org/matrix-ios-sdk/pull/1704))
+- CryptoV2: Fix JSONDictionary of keys query responses ([#1707](https://github.com/matrix-org/matrix-ios-sdk/pull/1707))
+- CryptoV2: Enable Crypto SDK for production ([#1708](https://github.com/matrix-org/matrix-ios-sdk/pull/1708))
+
+🐛 Bugfixes
+
+- Fix some scenarios where an answered call continues to ring ([#1710](https://github.com/matrix-org/matrix-ios-sdk/pull/1710))
+
+
+## Changes in 0.25.0 (2023-02-02)
+
+🙌 Improvements
+
+- CryptoV2: Decrypt notifications ([#1695](https://github.com/matrix-org/matrix-ios-sdk/pull/1695))
+- CryptoV2: Upload fallback keys ([#1697](https://github.com/matrix-org/matrix-ios-sdk/pull/1697))
+- CryptoV2: Set passphrase for the crypto store ([#1699](https://github.com/matrix-org/matrix-ios-sdk/pull/1699))
+- Backup: Import legacy backup in batches ([#1701](https://github.com/matrix-org/matrix-ios-sdk/pull/1701))
+- CryptoV2: New CryptoMachine on each background operation ([#1704](https://github.com/matrix-org/matrix-ios-sdk/pull/1704))
+- CryptoV2: Fix JSONDictionary of keys query responses ([#1707](https://github.com/matrix-org/matrix-ios-sdk/pull/1707))
+- CryptoV2: Enable Crypto SDK for production ([#1708](https://github.com/matrix-org/matrix-ios-sdk/pull/1708))
+
+
+## Changes in 0.24.8 (2023-01-24)
+
+✨ Features
+
+- Implement MSC3912: Relation-based redactions ([#1688](https://github.com/matrix-org/matrix-ios-sdk/pull/1688))
+
+🙌 Improvements
+
+- CryptoV2: Add keys query scheduler ([#1676](https://github.com/matrix-org/matrix-ios-sdk/pull/1676))
+- CryptoV2: Create crypto migration data ([#1681](https://github.com/matrix-org/matrix-ios-sdk/pull/1681))
+- CryptoSDK: Perform crypto migration if necessary ([#1684](https://github.com/matrix-org/matrix-ios-sdk/pull/1684))
+- Rename MXSessionSyncProgress ([#1686](https://github.com/matrix-org/matrix-ios-sdk/pull/1686))
+- CryptoV2: Batch migrate olm and megolm sessions ([#1687](https://github.com/matrix-org/matrix-ios-sdk/pull/1687))
+- CryptoV2: Extract room event encryption ([#1689](https://github.com/matrix-org/matrix-ios-sdk/pull/1689))
+- CryptoV2: Migration improvements ([#1692](https://github.com/matrix-org/matrix-ios-sdk/pull/1692))
+
+🐛 Bugfixes
+
+- Messages' replies: fix localizations issues. ([#1685](https://github.com/matrix-org/matrix-ios-sdk/pull/1685))
+
+
+## Changes in 0.24.7 (2023-01-10)
+
+✨ Features
+
+- Threads: Load the thread list using server-side sorting and pagination ([#6059](https://github.com/vector-im/element-ios/issues/6059))
+
+🙌 Improvements
+
+- Add API to delete user's account data. ([#1651](https://github.com/matrix-org/matrix-ios-sdk/pull/1651))
+- Change Sync parser to delete empty account_data events. ([#1656](https://github.com/matrix-org/matrix-ios-sdk/pull/1656))
+- CryptoV2: Disable notification decryption ([#1662](https://github.com/matrix-org/matrix-ios-sdk/pull/1662))
+- CryptoV2: Verification request and QR listener ([#1663](https://github.com/matrix-org/matrix-ios-sdk/pull/1663))
+- Analytics: Do not track cancellation errors ([#1664](https://github.com/matrix-org/matrix-ios-sdk/pull/1664))
+- Polls: ensure polls are up to date after they are closed. ([#1672](https://github.com/matrix-org/matrix-ios-sdk/pull/1672))
+- Polls: handle decryption errors. ([#1673](https://github.com/matrix-org/matrix-ios-sdk/pull/1673))
+- Polls: add support for rendering/replying to poll ended events. ([#1674](https://github.com/matrix-org/matrix-ios-sdk/pull/1674))
+- Remove commented device property on MXPushRulesRespose. ([#1677](https://github.com/matrix-org/matrix-ios-sdk/pull/1677))
+
+
+## Changes in 0.24.6 (2022-12-13)
+
+🙌 Improvements
+
+- Change invites count logic. ([#1645](https://github.com/matrix-org/matrix-ios-sdk/pull/1645))
+- Crypto: Fail launch when unavailable crypto ([#1646](https://github.com/matrix-org/matrix-ios-sdk/pull/1646))
+- Add message id for to-device events ([#1652](https://github.com/matrix-org/matrix-ios-sdk/pull/1652))
+- CryptoV2: Update to latest Verification API ([#1654](https://github.com/matrix-org/matrix-ios-sdk/pull/1654))
+
+🧱 Build
+
+- Update Ruby gems. ([#1655](https://github.com/matrix-org/matrix-ios-sdk/pull/1655))
+
+
+## Changes in 0.24.5 (2022-11-29)
+
+🙌 Improvements
+
+- CryptoV2: Import progress for room keys ([#1637](https://github.com/matrix-org/matrix-ios-sdk/pull/1637))
+- CryptoV2: Run all tasks with default priority ([#1639](https://github.com/matrix-org/matrix-ios-sdk/pull/1639))
+- CryptoV2: Fix backup performance ([#1641](https://github.com/matrix-org/matrix-ios-sdk/pull/1641))
+- MXSession: Calculate sync progress state ([#1643](https://github.com/matrix-org/matrix-ios-sdk/pull/1643))
+- CryptoV2: Add support to decrypt notifications and receive keys ([#1644](https://github.com/matrix-org/matrix-ios-sdk/pull/1644))
+- Pod: Fix linting on release mode & run fastlane lint on release configuration. ([#1648](https://github.com/matrix-org/matrix-ios-sdk/pull/1648))
+
+
+## Changes in 0.24.4 (2022-11-29)
+
+🙌 Improvements
+
+- CryptoV2: Import progress for room keys ([#1637](https://github.com/matrix-org/matrix-ios-sdk/pull/1637))
+- CryptoV2: Run all tasks with default priority ([#1639](https://github.com/matrix-org/matrix-ios-sdk/pull/1639))
+- CryptoV2: Fix backup performance ([#1641](https://github.com/matrix-org/matrix-ios-sdk/pull/1641))
+- MXSession: Calculate sync progress state ([#1643](https://github.com/matrix-org/matrix-ios-sdk/pull/1643))
+- CryptoV2: Add support to decrypt notifications and receive keys ([#1644](https://github.com/matrix-org/matrix-ios-sdk/pull/1644))
+
+
+## Changes in 0.24.3 (2022-11-15)
+
+✨ Features
+
+- Threads: added support to read receipts (MSC3771) ([#6663](https://github.com/vector-im/element-ios/issues/6663))
+- Threads: added support to notifications count (MSC3773) ([#6664](https://github.com/vector-im/element-ios/issues/6664))
+- Threads: added support to labs flag for read receipts ([#7029](https://github.com/vector-im/element-ios/issues/7029))
+- Threads: notification count in main timeline including un participated threads ([#7038](https://github.com/vector-im/element-ios/issues/7038))
+
+🙌 Improvements
+
+- CryptoV2: Room event decryption ([#1627](https://github.com/matrix-org/matrix-ios-sdk/pull/1627))
+- CryptoV2: Bugfixes ([#1630](https://github.com/matrix-org/matrix-ios-sdk/pull/1630))
+- CryptoV2: Log decryption errors separately ([#1632](https://github.com/matrix-org/matrix-ios-sdk/pull/1632))
+- Adds the sending of read receipts for poll start/end events ([#1633](https://github.com/matrix-org/matrix-ios-sdk/pull/1633))
+
+🐛 Bugfixes
+
+- Tests: Fix or disable flakey integration tests ([#1628](https://github.com/matrix-org/matrix-ios-sdk/pull/1628))
+- Threads: removed "unread_thread_notifications" from sync filters for server that doesn't support MSC3773 ([#7066](https://github.com/vector-im/element-ios/issues/7066))
+- Threads: Display number of unread messages above threads button ([#7076](https://github.com/vector-im/element-ios/issues/7076))
+
+📄 Documentation
+
+- Doc: Update the synapse installation section with poetry usage ([#1625](https://github.com/matrix-org/matrix-ios-sdk/pull/1625))
+
+
+## Changes in 0.24.2 (2022-11-01)
+
+🙌 Improvements
+
+- CryptoV2: Manual key export / import ([#1608](https://github.com/matrix-org/matrix-ios-sdk/pull/1608))
+- CryptoV2: Set local trust and deprecate legacy verification method ([#1613](https://github.com/matrix-org/matrix-ios-sdk/pull/1613))
+- Crypto: Define MXCrypto and MXCrossSigning as protocols ([#1614](https://github.com/matrix-org/matrix-ios-sdk/pull/1614))
+- CryptoV2: Cross-sign self after restoring session ([#1616](https://github.com/matrix-org/matrix-ios-sdk/pull/1616))
+- Crypto: Curate MXCrypto protocol methods ([#1618](https://github.com/matrix-org/matrix-ios-sdk/pull/1618))
+- Crypto: Complete MXCryptoV2 implementation ([#1620](https://github.com/matrix-org/matrix-ios-sdk/pull/1620))
+
+🚧 In development 🚧
+
+- Device Manger: Multi session sign out. ([#1619](https://github.com/vector-im/element-ios/issues/1619))
+
+
+## Changes in 0.24.1 (2022-10-18)
+
+🙌 Improvements
+
+- Support additional content in voice message. ([#1595](https://github.com/matrix-org/matrix-ios-sdk/pull/1595))
+- Key verification: Refactor verification manager, requests, transactions ([#1599](https://github.com/matrix-org/matrix-ios-sdk/pull/1599))
+- Crypto: Refactor QR transactions ([#1602](https://github.com/matrix-org/matrix-ios-sdk/pull/1602))
+- CryptoV2: Integrate Mac-compatible MatrixSDKCrypto ([#1603](https://github.com/matrix-org/matrix-ios-sdk/pull/1603))
+- CryptoV2: Unencrypted verification events ([#1605](https://github.com/matrix-org/matrix-ios-sdk/pull/1605))
+- Crypto: Remove megolm decrypt cache build flag ([#1606](https://github.com/matrix-org/matrix-ios-sdk/pull/1606))
+- Device Manager: Exposed method to update client information. ([#1609](https://github.com/vector-im/element-ios/issues/1609))
+- CryptoV2: Manual device verification ([#6781](https://github.com/vector-im/element-ios/issues/6781))
+- Add support for m.local_notification_settings.<device-id> in account_data ([#6797](https://github.com/vector-im/element-ios/issues/6797))
+- CryptoV2: Incoming verification requests ([#6809](https://github.com/vector-im/element-ios/issues/6809))
+- CryptoV2: QR code verification ([#6859](https://github.com/vector-im/element-ios/issues/6859))
+
+🐛 Bugfixes
+
+- Fix users' display name in messages. ([#6850](https://github.com/vector-im/element-ios/issues/6850))
+
+Others
+
+- Expose rest client method for generating login tokens through MSC3882 ([#1601](https://github.com/matrix-org/matrix-ios-sdk/pull/1601))
+
+
+## Changes in 0.24.0 (2022-10-04)
+
+🙌 Improvements
+
+- Crypto: Enable group session cache by default ([#1575](https://github.com/matrix-org/matrix-ios-sdk/pull/1575))
+- Crypto: Extract key backup engine ([#1578](https://github.com/matrix-org/matrix-ios-sdk/pull/1578))
+- MXSession: Set client information data if needed on resume. ([#1582](https://github.com/matrix-org/matrix-ios-sdk/pull/1582))
+- MXDevice: Move to dedicated file and implement MSC-3852. ([#1583](https://github.com/matrix-org/matrix-ios-sdk/pull/1583))
+- Add `enableNewClientInformationFeature` sdk option, disabled by default (PSG-799). ([#1588](https://github.com/matrix-org/matrix-ios-sdk/pull/1588))
+- Remove MXRoom's partialTextMessage support ([#6670](https://github.com/vector-im/element-ios/issues/6670))
+- CryptoV2: Key backups ([#6769](https://github.com/vector-im/element-ios/issues/6769))
+- CryptoV2: Key gossiping ([#6773](https://github.com/vector-im/element-ios/issues/6773))
+- User sessions: Add support for MSC3881 ([#6787](https://github.com/vector-im/element-ios/issues/6787))
+
+🧱 Build
+
+- Disable codecov/patch. ([#1579](https://github.com/matrix-org/matrix-ios-sdk/pull/1579))
+
+⚠️ API Changes
+
+- Upgrade minimum iOS and OSX deployment target to 13.0 and 10.15 respectively ([#1574](https://github.com/matrix-org/matrix-ios-sdk/pull/1574))
+
+Others
+
+- Avoid main thread assertion if we can't get the application ([#6754](https://github.com/vector-im/element-ios/issues/6754))
+
+
+## Changes in 0.23.19 (2022-09-28)
+
+🐛 Bugfixes
+
+- CVE-2022-39255: Olm/Megolm protocol confusion ([Security advisory](https://github.com/matrix-org/matrix-ios-sdk/security/advisories/GHSA-hw6g-j8v6-9hcm))
+- CVE-2022-39257: Impersonation via forwarded Megolm sessions ([Security advisory](https://github.com/matrix-org/matrix-ios-sdk/security/advisories/GHSA-qxr3-5jmq-xcf4))
+
+## Changes in 0.23.18 (2022-09-07)
+
+✨ Features
+
+- MXKeyBackup: Add support for symmetric key backups. ([#1542](https://github.com/matrix-org/matrix-ios-sdk/pull/1542))
+- CryptoSDK: Outgoing SAS User Verification Flow ([#6443](https://github.com/vector-im/element-ios/issues/6443))
+- CryptoV2: Self-verification flow ([#6589](https://github.com/vector-im/element-ios/issues/6589))
+
+🙌 Improvements
+
+- Allow setting room alias regardless of join rule ([#1559](https://github.com/matrix-org/matrix-ios-sdk/pull/1559))
+- Crypto: Cache inbound group sessions when decrypting ([#1566](https://github.com/matrix-org/matrix-ios-sdk/pull/1566))
+- Crypto: Create lazy in-memory room encryptors ([#1570](https://github.com/matrix-org/matrix-ios-sdk/pull/1570))
+- App Layout: Increased store version to force clear cache ([#6616](https://github.com/vector-im/element-ios/issues/6616))
+
+🐛 Bugfixes
+
+- Fix incoming calls sometimes ringing after being answered on another client ([#6614](https://github.com/vector-im/element-ios/issues/6614))
+
+🧱 Build
+
+- Xcode project(s) updated via Xcode recommended setting ([#1543](https://github.com/matrix-org/matrix-ios-sdk/pull/1543))
+- MXLog: Ensure MXLogLevel.none works if it is set after another log level has already been configured. ([#1550](https://github.com/matrix-org/matrix-ios-sdk/issues/1550))
+
+📄 Documentation
+
+- README: Update the badge header ([#1569](https://github.com/matrix-org/matrix-ios-sdk/pull/1569))
+- Update README for correct Swift usage. ([#1552](https://github.com/matrix-org/matrix-ios-sdk/issues/1552))
+
+Others
+
+- Crypto: User and device identity objects ([#1531](https://github.com/matrix-org/matrix-ios-sdk/pull/1531))
+- Analytics: Log all errors to analytics ([#1558](https://github.com/matrix-org/matrix-ios-sdk/pull/1558))
+- Improve MXLog file formatting and fix log message format ([#1564](https://github.com/matrix-org/matrix-ios-sdk/pull/1564))
+
+
+## Changes in 0.23.17 (2022-08-31)
+
+🙌 Improvements
+
+- KeyBackups: Add build flag for symmetric backup ([#1567](https://github.com/matrix-org/matrix-ios-sdk/pull/1567))
+
+
+## Changes in 0.23.16 (2022-08-24)
+
+✨ Features
+
+- MXKeyBackup: Add support for symmetric key backups. ([#1542](https://github.com/matrix-org/matrix-ios-sdk/pull/1542))
+- CryptoSDK: Outgoing SAS User Verification Flow ([#6443](https://github.com/vector-im/element-ios/issues/6443))
+
+🙌 Improvements
+
+- App Layout: Increased store version to force clear cache ([#6616](https://github.com/vector-im/element-ios/issues/6616))
+
+🧱 Build
+
+- Xcode project(s) updated via Xcode recommended setting ([#1543](https://github.com/matrix-org/matrix-ios-sdk/pull/1543))
+- MXLog: Ensure MXLogLevel.none works if it is set after another log level has already been configured. ([#1550](https://github.com/matrix-org/matrix-ios-sdk/issues/1550))
+
+📄 Documentation
+
+- Update README for correct Swift usage. ([#1552](https://github.com/matrix-org/matrix-ios-sdk/issues/1552))
+
+Others
+
+- Crypto: User and device identity objects ([#1531](https://github.com/matrix-org/matrix-ios-sdk/pull/1531))
+- Analytics: Log all errors to analytics ([#1558](https://github.com/matrix-org/matrix-ios-sdk/pull/1558))
+
+
+## Changes in 0.23.15 (2022-08-10)
+
+🐛 Bugfixes
+
+- MXSpaceService: Fix a crash on Synapse 1.65 following changes to the /hierarchy API. ([#6547](https://github.com/vector-im/element-ios/issues/6547))
+
+
+## Changes in 0.23.14 (2022-08-09)
+
+🙌 Improvements
+
+- CI: Enable integration tests on GitHub actions ([#1537](https://github.com/matrix-org/matrix-ios-sdk/pull/1537))
+- App Layout: Added breadcrumbs data fetcher and updated room summary data type to reflect new needs ([#6407](https://github.com/vector-im/element-ios/issues/6407))
+- App Layout: added MXSpace.minimumPowerLevelForAddingRoom() and MXSpaceService.rootSpaces ([#6410](https://github.com/vector-im/element-ios/issues/6410))
+
+🐛 Bugfixes
+
+- MXRestClient: Send an empty dictionary when calling /join to be spec compliant. ([#6481](https://github.com/vector-im/element-ios/issues/6481))
+- App Layout: exclude room summaries without notifications from unread list ([#6511](https://github.com/vector-im/element-ios/issues/6511))
+
+
+## Changes in 0.23.13 (2022-07-26)
+
+🙌 Improvements
+
+- MXRoom: Support reply to beacon info event. ([#6423](https://github.com/vector-im/element-ios/issues/6423))
+- MXBeaconAggregations: Handle beacon info redaction. ([#6470](https://github.com/vector-im/element-ios/issues/6470))
+
+🐛 Bugfixes
+
+- Fix formatted_body content for unformatted events ([#6446](https://github.com/vector-im/element-ios/issues/6446))
+
+🧱 Build
+
+- Disable nightly tests for now as they're always timing out. ([#1523](https://github.com/matrix-org/matrix-ios-sdk/pull/1523))
+
+Others
+
+- Reduce project warnings ([#1527](https://github.com/matrix-org/matrix-ios-sdk/pull/1527))
+- Crypto: Convert verification request and transaction to protocols ([#1528](https://github.com/matrix-org/matrix-ios-sdk/pull/1528))
+
+
+## Changes in 0.23.12 (2022-07-13)
+
+🐛 Bugfixes
+
+- Fix JingleCallStack UI threading crashes ([#6415](https://github.com/vector-im/element-ios/issues/6415))
+
+
+## Changes in 0.23.11 (2022-07-12)
+
+✨ Features
+
+- Analytics: Track non-fatal issues if consent provided ([#1503](https://github.com/matrix-org/matrix-ios-sdk/pull/1503))
+- Crypto: Integrate Rust-based OlmMachine to encrypt / decrypt messages ([#6357](https://github.com/vector-im/element-ios/issues/6357))
+
+🙌 Improvements
+
+- Include ID server access token when making a 3pid invite (and creating a room). ([#6385](https://github.com/vector-im/element-ios/issues/6385))
+
+🐛 Bugfixes
+
+- MXiOSAudioOutputRouter: fixed issue that prevents the system to properly switch from built-in to bluetooth output. ([#5368](https://github.com/vector-im/element-ios/issues/5368))
+- Fix MXCall answer not being sent to server in some cases ([#6359](https://github.com/vector-im/element-ios/issues/6359))
+
+Others
+
+- Integration tests should wait until the room is ready ([#1516](https://github.com/matrix-org/matrix-ios-sdk/pull/1516))
+- Analytics: Log errors with details in analytics ([#1517](https://github.com/matrix-org/matrix-ios-sdk/pull/1517))
+- Secret Storage: Detect multiple valid SSSS keys ([#4569](https://github.com/vector-im/element-ios/issues/4569))
+
+
+## Changes in 0.23.10 (2022-06-28)
+
+✨ Features
+
+- Add missing "user_busy" MXCallHangupEvent ([#1342](https://github.com/vector-im/element-ios/issues/1342))
+
+🐛 Bugfixes
+
+- Handle empty pagination end token on timeline end reached ([#6347](https://github.com/vector-im/element-ios/issues/6347))
+
+⚠️ API Changes
+
+- Drop support for iOS 10 and 32-bit architectures ([#1501](https://github.com/matrix-org/matrix-ios-sdk/pull/1501))
+
+🧱 Build
+
+- CI: Add concurrency to GitHub Actions. ([#5039](https://github.com/vector-im/element-ios/issues/5039))
+- Add Codecov for unit tests coverage. ([#6306](https://github.com/vector-im/element-ios/issues/6306))
+
+Others
+
+- Crypto: Subclass MXCrypto to enable work-in-progress Rust sdk ([#1496](https://github.com/matrix-org/matrix-ios-sdk/pull/1496))
+- MXBackgroundSyncService - Expose separate method for fetching a particular room's read marker event without causing extra syncs. ([#1500](https://github.com/matrix-org/matrix-ios-sdk/pull/1500))
+- Crypto: Integrate new Rust-based MatrixSDKCrypto framework for DEBUG builds ([#1501](https://github.com/matrix-org/matrix-ios-sdk/pull/1501))
+
+
+## Changes in 0.23.9 (2022-06-14)
+
+🐛 Bugfixes
+
+- Fix a crash on start if the user has a very large number of unread events in a room ([#1490](https://github.com/matrix-org/matrix-ios-sdk/pull/1490))
+- Prevent invalid room names on member count underflows. ([#6227](https://github.com/vector-im/element-ios/issues/6227))
+- Location sharing: Fix geo URI parsing with altitude component. ([#6247](https://github.com/vector-im/element-ios/issues/6247))
+
+⚠️ API Changes
+
+- MXRestClient: Add `logoutDevices` parameter to `changePassword` method. ([#6175](https://github.com/vector-im/element-ios/issues/6175))
+- Mark MXRestClient init as `required` for mocking. ([#6179](https://github.com/vector-im/element-ios/issues/6179))
+
+
+## Changes in 0.23.8 (2022-06-03)
+
+🐛 Bugfixes
+
+- Room state: Reload room state if detected empty on disk ([#1483](https://github.com/matrix-org/matrix-ios-sdk/pull/1483))
+- Remove unwanted parts from replies new_content body/formatted_body ([#3517](https://github.com/vector-im/element-ios/issues/3517))
+- MXBackgroundStore: Avoid clearing file store if event stream token is missing. ([#5924](https://github.com/vector-im/element-ios/issues/5924))
+- MXRestClient: limit the query length to 2048 for joinRoom ([#6224](https://github.com/vector-im/element-ios/issues/6224))
+- Bump realm to 10.27.0 to fix crypto performance issue. ([#6239](https://github.com/vector-im/element-ios/issues/6239))
+
+🚧 In development 🚧
+
+- Location sharing: Authorize only one live beacon info per member and per room. ([#6100](https://github.com/vector-im/element-ios/issues/6100))
+
+Others
+
+- Crypto: Add more logs when encrypting messages ([#1476](https://github.com/matrix-org/matrix-ios-sdk/pull/1476))
+
+
+## Changes in 0.23.7 (2022-05-31)
+
+🐛 Bugfixes
+
+- MXSession: Recreate room summaries when detected missing. ([#5924](https://github.com/vector-im/element-ios/issues/5924))
+- Fixed crashes on invalid casting of MXUser to MXMyUser causing unrecognized selectors on the mxSession property. ([#6187](https://github.com/vector-im/element-ios/issues/6187))
+- MXCoreDataRoomSummaryStore: Make removing a room summary synchronous. ([#6218](https://github.com/vector-im/element-ios/issues/6218))
+
+⚠️ API Changes
+
+- MXTools: generateTransactionId no longer returns an optional in Swift. ([#1477](https://github.com/matrix-org/matrix-ios-sdk/pull/1477))
+
+🚧 In development 🚧
+
+- Location sharing: Persist beacon info summaries to disk. ([#6199](https://github.com/vector-im/element-ios/issues/6199))
+
+Others
+
+- MXFileStore: Add extra logs when saving and loading room state ([#1478](https://github.com/matrix-org/matrix-ios-sdk/pull/1478))
+- MXBackgroundSyncServiceTests: Add tests for outdated gappy syncs. ([#6142](https://github.com/vector-im/element-ios/issues/6142))
+
+
+## Changes in 0.23.6 (2022-05-19)
+
+No significant changes.
+
+
+## Changes in 0.23.5 (2022-05-18)
+
+✨ Features
+
+- Add `io.element.video` room type. ([#6149](https://github.com/vector-im/element-ios/issues/6149))
+
+🙌 Improvements
+
+- Rooms: support for attributedPartialTextMessage storage ([#3526](https://github.com/vector-im/element-ios/issues/3526))
+
+🚧 In development 🚧
+
+- MXBeaconInfoSummary: Add room id and support device id update after start location sharing. ([#5722](https://github.com/vector-im/element-ios/issues/5722))
+
+Others
+
+- Update check for server-side threads support to match spec. ([#1460](https://github.com/matrix-org/matrix-ios-sdk/pull/1460))
+
+
+## Changes in 0.23.4 (2022-05-05)
+
+🙌 Improvements
+
+- Crypto: Share Megolm session keys when inviting a new user ([#4947](https://github.com/vector-im/element-ios/issues/4947))
+- Authentication: Add MXUsernameAvailability and isUsernameAvailable method on MXRestClient. ([#5648](https://github.com/vector-im/element-ios/issues/5648))
+
+🐛 Bugfixes
+
+- MXSpaceService: added method firstRootAncestorForRoom ([#5965](https://github.com/vector-im/element-ios/issues/5965))
+- MXRoom: Update room summary after removing/refreshing unsent messages. ([#6040](https://github.com/vector-im/element-ios/issues/6040))
+
+🚧 In development 🚧
+
+- Location sharing: Handle live location beacon event. Handle beacon info + beacon data aggregation. ([#6021](https://github.com/vector-im/element-ios/issues/6021))
+- Location sharing: Handle stop live location sharing. ([#6070](https://github.com/vector-im/element-ios/issues/6070))
+- Location sharing: MXBeaconInfoSummary add isActive property. ([#6113](https://github.com/vector-im/element-ios/issues/6113))
+
+## Changes in 0.23.3 (2022-04-20)
+
+🙌 Improvements
+
+- Location sharing: Handle live location sharing start event. ([#5903](https://github.com/vector-im/element-ios/issues/5903))
+- Add a preferred presence property to MXSession ([#5995](https://github.com/vector-im/element-ios/issues/5995))
+- Pods: Upgrade JitsiMeetSDK to 5.0.2 and re-enable building for ARM64 simulator. ([#6018](https://github.com/vector-im/element-ios/issues/6018))
+
+🐛 Bugfixes
+
+- MatrixSDK: Fix some crashes after 1.8.10. ([#6023](https://github.com/vector-im/element-ios/issues/6023))
+
+Others
+
+- Fix some warnings. ([#1440](https://github.com/matrix-org/matrix-ios-sdk/pull/1440))
+
+
+## Changes in 0.23.2 (2022-04-05)
+
+🙌 Improvements
+
+- Room: Return room identifier and known servers when resolving alias ([#4858](https://github.com/vector-im/element-ios/issues/4858))
+- MXRestClient: Use the stable hierarchy endpoint from MSC2946 ([#5144](https://github.com/vector-im/element-ios/issues/5144))
+- MXPublicRoom: added implementation for JSONDictionary ([#5953](https://github.com/vector-im/element-ios/issues/5953))
+
+🐛 Bugfixes
+
+- MXEventListener/MXRoomSummary: Fix retain cycles ([#5058](https://github.com/vector-im/element-ios/issues/5058))
+- Sync Spaces order with web ([#5134](https://github.com/vector-im/element-ios/issues/5134))
+- VoIP: Recreate CXProvider if a call cannot be hung up ([#5189](https://github.com/vector-im/element-ios/issues/5189))
+- MXThreadingService: Apply edits on thread root and latest events of a thread list. ([#5845](https://github.com/vector-im/element-ios/issues/5845))
+- MXThread: Fix redacted events & fix undecrypted events. ([#5877](https://github.com/vector-im/element-ios/issues/5877))
+- Room: Do not commit to file store after typing a single character ([#5906](https://github.com/vector-im/element-ios/issues/5906))
+- Move `handleRoomKeyEvent` logic back to `MXSession`. ([#5938](https://github.com/vector-im/element-ios/issues/5938))
+- MXSuggestedRoomListDataFetcher: Spaces shouldn't be displayed as suggested rooms ([#5978](https://github.com/vector-im/element-ios/issues/5978))
+
+⚠️ API Changes
+
+- Location sharing: Add new event asset type for pin drop location sharing ([#5858](https://github.com/vector-im/element-ios/issues/5858))
+
+
+## Changes in 0.23.1 (2022-03-28)
+
+🙌 Improvements
+
+- MXRestClient: Use the stable hierarchy endpoint from MSC2946 ([#5144](https://github.com/vector-im/element-ios/issues/5144))
+
+🐛 Bugfixes
+
+- Sync Spaces order with web ([#5134](https://github.com/vector-im/element-ios/issues/5134))
+
+
+## Changes in 0.23.0 (2022-03-22)
+
+✨ Features
+
+- MXSpace: added canAddRoom() method ([#5230](https://github.com/vector-im/element-ios/issues/5230))
+- MXRoomAliasAvailabilityChecker: added extractLocalAliasPart() ([#5233](https://github.com/vector-im/element-ios/issues/5233))
+
+🙌 Improvements
+
+- Space creation: Added home server capabilities, room alias validator, restricted join rule, refined space related API, and added tests ([#5224](https://github.com/vector-im/element-ios/issues/5224))
+- Added room upgrade API call and the ability to (un)suggest a room for a space ([#5231](https://github.com/vector-im/element-ios/issues/5231))
+- MXSpaceService: added `spaceSummaries` property ([#5401](https://github.com/vector-im/element-ios/issues/5401))
+- Threads: Fix deleted thread root & decrypt thread list. ([#5441](https://github.com/vector-im/element-ios/issues/5441))
+- Threads: Replace property for in-thread replies. ([#5704](https://github.com/vector-im/element-ios/issues/5704))
+- MXRoomEventFilter: Update property names for relation types and senders. ([#5705](https://github.com/vector-im/element-ios/issues/5705))
+- MXThreadingService: Use versions instead of capabilities to check threads server support. ([#5744](https://github.com/vector-im/element-ios/issues/5744))
+- MXEventContentRelatesTo: Update reply fallback property name and reverse the logic. ([#5790](https://github.com/vector-im/element-ios/issues/5790))
+- Threads: Update all properties to stable values. ([#5791](https://github.com/vector-im/element-ios/issues/5791))
+- Room: API to ignore the sender of a room invite before the room is joined ([#5807](https://github.com/vector-im/element-ios/issues/5807))
+- MXRoom: Do not try to guess threadId for replies, get that as a parameter. ([#5829](https://github.com/vector-im/element-ios/issues/5829))
+- MXThreadingService: Fix number of replies & notification/highlight counts for threads. ([#5843](https://github.com/vector-im/element-ios/issues/5843))
+
+🐛 Bugfixes
+
+- MXThreadEventTimeline: Decrypt events fetched from server. ([#5749](https://github.com/vector-im/element-ios/issues/5749))
+- MXRoom: Fix retain cycles, in particular between MXRoomOperation and its block. ([#5805](https://github.com/vector-im/element-ios/issues/5805))
+- Timeline: Prevent skipping an item between each pagination batch ([#5819](https://github.com/vector-im/element-ios/issues/5819))
+- Crypto: Distinguish between original and edit message when preventing replay attacks ([#5835](https://github.com/vector-im/element-ios/issues/5835))
+- MXThreadEventTimeline: Fix processing order of thread events & fix empty thread screen issue. ([#5840](https://github.com/vector-im/element-ios/issues/5840))
+- Timeline: Paginated events always show the most recent edit ([#5848](https://github.com/vector-im/element-ios/issues/5848))
+- MXFileStore: Log when filters cannot be saved or loaded ([#5873](https://github.com/vector-im/element-ios/issues/5873))
+
+
+## Changes in 0.22.6 (2022-03-14)
+
+🙌 Improvements
+
+- Room: API to ignore the sender of a room invite before the room is joined ([#5807](https://github.com/vector-im/element-ios/issues/5807))
+
+
+## Changes in 0.22.5 (2022-03-08)
+
+🙌 Improvements
+
+- Room data filters: strict matches support ([#1379](https://github.com/matrix-org/matrix-ios-sdk/pull/1379))
+- Analytics: Add event composition tracking and isSpace for joined room events. ([#5365](https://github.com/vector-im/element-ios/issues/5365))
+- MXEvent+Extensions: Do not highlight any event that the current user sent. ([#5552](https://github.com/vector-im/element-ios/issues/5552))
+
+🐛 Bugfixes
+
+- Room: fix crash on members count not being always properly set ([#4949](https://github.com/vector-im/element-ios/issues/4949))
+- MXSuggestedRoomListDataFetcher: hide suggested rooms that a user is already part of ([#5276](https://github.com/vector-im/element-ios/issues/5276))
+- MXFileStore: Do not reuse room files if the room is marked for deletion ([#5717](https://github.com/vector-im/element-ios/issues/5717))
+
+
+## Changes in 0.22.4 (2022-02-25)
+
+🙌 Improvements
+
+- MXThreadingService: Add thread creation delegate method. ([#5694](https://github.com/vector-im/element-ios/issues/5694))
+
+
+## Changes in 0.22.3 (2022-02-24)
+
+🐛 Bugfixes
+
+- Thread Safety: Replace all objc_sync_enter/exit methods with recursive locks. ([#5675](https://github.com/vector-im/element-ios/issues/5675))
+
+
+## Changes in 0.22.2 (2022-02-22)
+
+🙌 Improvements
+
+- Added support for unstable poll prefixes. ([#5114](https://github.com/vector-im/element-ios/issues/5114))
+- Exclude all files and directories from iCloud and iTunes backup ([#5498](https://github.com/vector-im/element-ios/issues/5498))
+- MXSession & MXThreadingService: Implement server capabilities api & implement thread list api according to server capabilities. ([#5540](https://github.com/vector-im/element-ios/issues/5540))
+- MXThreadEventTimeline: Replace context api with relations api. ([#5629](https://github.com/vector-im/element-ios/issues/5629))
+
+🐛 Bugfixes
+
+- Settings: fix phone number validation through custom URL ([#3562](https://github.com/vector-im/element-ios/issues/3562))
+- MXRoomListData: Consider all properties when comparing room list data. ([#5537](https://github.com/vector-im/element-ios/issues/5537))
+
+🧱 Build
+
+- Use the --no-rate-limit flag as mentioned in the README ([#1352](https://github.com/vector-im/element-ios/issues/1352))
+
+
+## Changes in 0.22.1 (2022-02-16)
+
+🐛 Bugfixes
+
+- Fix e2ee regression introduced by #1358 ([#5564](https://github.com/vector-im/element-ios/issues/5564))
+
+
+## Changes in 0.22.0 (2022-02-09)
+
+✨ Features
+
+- Add .well-known parsing for tile server / map style configurations. ([#5298](https://github.com/vector-im/element-ios/issues/5298))
+
+🙌 Improvements
+
+- Introduce `MXThreadingService` and `MXThread` classes. ([#5068](https://github.com/vector-im/element-ios/issues/5068))
+- MXThreadingService: Expose threads of a room. ([#5092](https://github.com/vector-im/element-ios/issues/5092))
+- Threads: Include redacted root events into threads. ([#5119](https://github.com/vector-im/element-ios/issues/5119))
+- MXSession: Avoid event/null requests and reprocess bg sync cache if received when processing. ([#5426](https://github.com/vector-im/element-ios/issues/5426))
+- MXRoomListDataFetcherDelegate: Add `totalCountsChanged` parameter to delegate method. ([#5448](https://github.com/vector-im/element-ios/issues/5448))
+
+🐛 Bugfixes
+
+- 🐛 Protect the spacesPerId variable by a barrier - Fixes Thread 1: EXC_BAD_ACCESS crash that would occur whenever multiple concurrent threads would attempt to mutate spacesPerId at the same time ([#1350](https://github.com/vector-im/element-ios/issues/1350))
+- Fix for display name and avatar shown incorrectly for users that have left the room. ([#2827](https://github.com/vector-im/element-ios/issues/2827))
+- Protect against encryption state loss ([#5184](https://github.com/vector-im/element-ios/issues/5184))
+- MXSpace: fix space invites blocks space graph build ([#5432](https://github.com/vector-im/element-ios/issues/5432))
+- MXCoreDataRoomSummaryStore: Fix main context merges from persistent store. ([#5462](https://github.com/vector-im/element-ios/issues/5462))
+- MXSession: Do not pause the session if a sync fails due to cancellation. ([#5509](https://github.com/vector-im/element-ios/issues/5509))
+- CoreData: Fix fetch requests fetching only specific properties. ([#5519](https://github.com/vector-im/element-ios/issues/5519))
+
+⚠️ API Changes
+
+- MXRestClient & MXRoom: Introduce `threadId` parameters for event sending methods. ([#5068](https://github.com/vector-im/element-ios/issues/5068))
+
+🧱 Build
+
+- Update Fastfile to use Xcode 13.2 on CI. ([#4883](https://github.com/vector-im/element-ios/issues/4883))
+
+Others
+
+- Add WIP to towncrier. ([#1349](https://github.com/matrix-org/matrix-ios-sdk/pull/1349))
+
+
+## Changes in 0.21.0 (2022-01-25)
+
+✨ Features
+
+- MXRoomSummaryStore & MXRoomListDataManager: Implementation with Core Data. ([#4384](https://github.com/vector-im/element-ios/issues/4384))
+- Allow editing poll start events. ([#5114](https://github.com/vector-im/element-ios/issues/5114))
+- Added static location sharing sending and rendering support. ([#5298](https://github.com/vector-im/element-ios/issues/5298))
+
+🙌 Improvements
+
+- MXCoreDataRoomSummaryStore: Use nested contexts to better manage main context updates. ([#5412](https://github.com/vector-im/element-ios/issues/5412))
+- Only count joined rooms when profiling sync performance. ([#5429](https://github.com/vector-im/element-ios/issues/5429))
+
+🐛 Bugfixes
+
+- Fixes DTMF(dial tones) during voice calls. ([#5375](https://github.com/vector-im/element-ios/issues/5375))
+- MXCoreDataRoomListDataFetcher: Update fetchRequest if properties changed before fetching the first page. ([#5377](https://github.com/vector-im/element-ios/issues/5377))
+- MXSession: Fix remove room race case. ([#5412](https://github.com/vector-im/element-ios/issues/5412))
+
+
+## Changes in 0.20.16 (2022-01-11)
+
+🙌 Improvements
+
+- MXResponse has been frozen for binary compatibility when building as an XCFramework. ([#1002](https://github.com/matrix-org/matrix-ios-sdk/pull/1002))
+- MXTaskProfile: Add an MXTaskProfileName enum instead of individual strings for Name and Category. ([#5035](https://github.com/vector-im/element-ios/issues/5035))
+
+⚠️ API Changes
+
+- MXAnalyticsDelegate: The generic methods have been replaced with type safe ones for each event tracked. ([#5035](https://github.com/vector-im/element-ios/issues/5035))
+
+
+## Changes in 0.20.15 (2021-12-14)
+
+🙌 Improvements
+
+- Expose missing Jingle headers in umbrella header ([#1308](https://github.com/matrix-org/matrix-ios-sdk/pull/1308))
+
+⚠️ API Changes
+
+- MXTools: Add an error parameter to the failure of +convertVideoAssetToMP4:withTargetFileSize:success:failure: ([#4749](https://github.com/vector-im/element-ios/issues/4749))
+
+
+## Changes in 0.20.14 (2021-12-09)
+
+🐛 Bugfixes
+
+- Sending blank m.room.encryption on iOS will disable encryption ([Security advisory](https://github.com/matrix-org/matrix-ios-sdk/security/advisories/GHSA-fxvm-7vhj-wj98))
+
+## Changes in 0.20.13 (2021-12-06)
+
+Others
+
+- Replace semantic imports with classic ones to enable use of the SDK in Kotlin Multiplatform Mobile projects ([#5046](https://github.com/vector-im/element-ios/issues/5046))
+
+
+## Changes in 0.20.12 (2021-12-06)
+
+🐛 Bugfixes
+
+- Fix release 0.20.11 ([#5247](https://github.com/vector-im/element-ios/issues/5247))
+
+
+## Changes in 0.20.11 (2021-12-03)
+
+✨ Features
+
+- Moved from /space to /hierarchy API to support pagination ([#4893](https://github.com/vector-im/element-ios/issues/4893))
+- Adds clientPermalinkBaseUrl for a custom permalink base url. ([#4981](https://github.com/vector-im/element-ios/issues/4981))
+- Added poll specific event sending methods, event aggregator and model builder. ([#5114](https://github.com/vector-im/element-ios/issues/5114))
+
+🐛 Bugfixes
+
+- Initialize imagesCacheLruCache before caching - caching operations would fail silently because cache was not initialized ([#1281](https://github.com/vector-im/element-ios/issues/1281))
+- MXRoom: Fix reply event content for just thread-aware clients. ([#5007](https://github.com/vector-im/element-ios/issues/5007))
+- Add ability to get roomAccountData from MXBackgroundSyncService to fix badge bug from virtual rooms. ([#5155](https://github.com/vector-im/element-ios/issues/5155))
+- Fixed duplicated children ids in MXSpaces ([#5181](https://github.com/vector-im/element-ios/issues/5181))
+- Do not expose headers that should be use privately inside the framework. ([#5194](https://github.com/vector-im/element-ios/issues/5194))
+- Fix for the in-call screen freezing on a new PSTN call. ([#5223](https://github.com/vector-im/element-ios/issues/5223))
+
+🧱 Build
+
+- Build: Update to Xcode 12.5 in the Fastfile and macOS 11 in the GitHub actions. ([#5195](https://github.com/vector-im/element-ios/issues/5195))
+
+
+## Changes in 0.20.10 (2021-11-17)
+
+🙌 Improvements
+
+- Made room list fetch sort and filter options structs. Removed fetch options references from them and made them equatable. Comparing them in the fetch options before refreshing the fetchers. ([#4384](https://github.com/vector-im/element-ios/issues/4384))
+- MXRealmCryptoStore: Reuse background tasks and use new api for remaining perform operations. ([#4431](https://github.com/vector-im/element-ios/issues/4431))
+
+🐛 Bugfixes
+
+- MXAggregations: Ensure the store is cleared when the file store is cleared. ([#3884](https://github.com/vector-im/element-ios/issues/3884))
+- MXSpaceService: abort graph building when session is closing ([#5049](https://github.com/vector-im/element-ios/issues/5049))
+- Fixed retain cycles between background tasks and themselves, and between the background task expiration handler and the background mode handler. ([#5054](https://github.com/vector-im/element-ios/issues/5054))
+- MXRoomSummaryUpdater: Fix upgraded rooms being marked as visible if the tombstone event comes in as part of a limited sync. ([#5080](https://github.com/vector-im/element-ios/issues/5080))
+- MXRoomListDataFilterOptions: Filter out any cached room previews. ([#5083](https://github.com/vector-im/element-ios/issues/5083))
+- MXRoomListDataSortOptions: Fix room ordering regression. ([#5105](https://github.com/vector-im/element-ios/issues/5105))
+- Fixed fallback key signature validation. ([#5120](https://github.com/vector-im/element-ios/issues/5120))
+- MXSession: Make session resumable from paused state & avoid to-device events catchup request when paused or pause requested. ([#5127](https://github.com/vector-im/element-ios/issues/5127))
+- Room ordering: Improve membership event filtering. ([#5150](https://github.com/vector-im/element-ios/issues/5150))
+
+
 ## Changes in 0.20.9 (2021-10-21)
 
 🐛 Bugfixes

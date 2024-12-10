@@ -18,6 +18,9 @@
 #import "MXAccountData.h"
 
 #import "MXJSONModel.h"
+#import "MXRestClient.h"
+
+#warning File has not been annotated with nullability, see MX_ASSUME_MISSING_NULLABILITY_BEGIN
 
 @interface MXAccountData ()
 {
@@ -66,9 +69,19 @@
     accountDataDict[type] = data;
 }
 
+- (void)deleteDataWithType:(NSString *)type
+{
+    [accountDataDict removeObjectForKey:type];
+}
+
 - (NSDictionary *)accountDataForEventType:(NSString*)eventType
 {
     return accountDataDict[eventType];
+}
+
+- (NSDictionary<NSString *,id> *)allAccountDataEvents
+{
+    return accountDataDict.copy;
 }
 
 - (NSDictionary<NSString *, id> *)accountData
@@ -83,6 +96,25 @@
                             }];
     }
     return @{@"events": events};
+}
+
++ (NSString *)localNotificationSettingsKeyForDeviceWithId:(NSString*)deviceId
+{
+    return [kMXAccountDataLocalNotificationKeyPrefix stringByAppendingString:deviceId];
+}
+
+- (NSDictionary <NSString *, id>*)localNotificationSettingsForDeviceWithId:(NSString*)deviceId
+{
+    if (!deviceId)
+    {
+        return nil;
+    }
+    
+    
+    NSString *deviceNotificationKey = [MXAccountData localNotificationSettingsKeyForDeviceWithId:deviceId];
+    NSDictionary <NSString *, id>*deviceNotificationSettings;
+    MXJSONModelSetDictionary(deviceNotificationSettings, accountDataDict[deviceNotificationKey]);
+    return deviceNotificationSettings;
 }
 
 @end

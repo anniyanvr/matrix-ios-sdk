@@ -1,7 +1,7 @@
 Pod::Spec.new do |s|
 
   s.name         = "MatrixSDK"
-  s.version      = "0.20.9"
+  s.version      = "0.27.17"
   s.summary      = "The iOS SDK to build apps compatible with Matrix (https://www.matrix.org)"
 
   s.description  = <<-DESC
@@ -22,16 +22,19 @@ Pod::Spec.new do |s|
   s.requires_arc  = true
   s.swift_versions = ['5.1', '5.2']
   
-  s.ios.deployment_target = "9.0"
-  s.osx.deployment_target = "10.10"
+  s.ios.deployment_target = "13.0"
+  s.osx.deployment_target = "10.15"
   
   s.default_subspec = 'Core'
   s.subspec 'Core' do |ss|
-      ss.ios.deployment_target = "9.0"
-      ss.osx.deployment_target = "10.10"
+      ss.ios.deployment_target = "13.0"
+      ss.osx.deployment_target = "10.15"
       
       ss.source_files = "MatrixSDK", "MatrixSDK/**/*.{h,m}", "MatrixSDK/**/*.{swift}"
       ss.osx.exclude_files = "MatrixSDK/VoIP/MXiOSAudioOutputRoute*.swift"
+      ss.private_header_files = ['MatrixSDK/MatrixSDKSwiftHeader.h', "MatrixSDK/**/*_Private.h"]
+      ss.resources = "MatrixSDK/**/*.{xcdatamodeld}"
+      ss.frameworks = "CoreData"
 
       ss.dependency 'AFNetworking', '~> 4.0.0'
       ss.dependency 'GZIP', '~> 1.3.0'
@@ -39,13 +42,13 @@ Pod::Spec.new do |s|
       ss.dependency 'SwiftyBeaver', '1.9.5'
 
       # Requirements for e2e encryption
-      ss.dependency 'OLMKit', '~> 3.2.5'
-      ss.dependency 'Realm', '10.16.0'
+      ss.dependency 'Realm', '10.27.0'
       ss.dependency 'libbase58', '~> 0.1.4'
+      ss.dependency 'MatrixSDKCrypto', '0.4.3', :configurations => ["DEBUG", "RELEASE"], :inhibit_warnings => true
   end
 
   s.subspec 'JingleCallStack' do |ss|
-    ss.ios.deployment_target = "11.0"
+    ss.ios.deployment_target = "13.0"
     
     ss.source_files  = "MatrixSDKExtensions/VoIP/Jingle/**/*.{h,m}"
     
@@ -57,11 +60,8 @@ Pod::Spec.new do |s|
     #ss.ios.dependency 'GoogleWebRTC', '~>1.1.21820'
     
     # Use WebRTC framework included in Jitsi Meet SDK
-    ss.ios.dependency 'JitsiMeetSDK', ' 3.10.2'
-
-    # JitsiMeetSDK has not yet binaries for arm64 simulator
-    ss.pod_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'arm64' }
-    ss.user_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'arm64' }
+    # Use the lite version so we don't add a dependency on Giphy.
+    ss.ios.dependency 'JitsiMeetSDKLite', '8.1.2-lite'
   end
 
 end

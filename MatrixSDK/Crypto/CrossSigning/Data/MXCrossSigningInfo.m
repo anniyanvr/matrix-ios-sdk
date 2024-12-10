@@ -15,12 +15,38 @@
  */
 
 #import "MXCrossSigningInfo_Private.h"
+#import "MatrixSDKSwiftHeader.h"
 
 #pragma mark - Constants
 
 NSString *const MXCrossSigningInfoTrustLevelDidChangeNotification = @"MXCrossSigningInfoTrustLevelDidChangeNotification";
 
 @implementation MXCrossSigningInfo
+
+- (instancetype)initWithUserIdentity:(MXCryptoUserIdentityWrapper *)userIdentity
+{
+    self = [self init];
+    if (self)
+    {
+        _userId = userIdentity.userId;
+        NSMutableDictionary *keys = [NSMutableDictionary dictionary];
+        if (userIdentity.masterKeys)
+        {
+            keys[MXCrossSigningKeyType.master] = userIdentity.masterKeys;
+        }
+        if (userIdentity.selfSignedKeys)
+        {
+            keys[MXCrossSigningKeyType.selfSigning] = userIdentity.selfSignedKeys;
+        }
+        if (userIdentity.userSignedKeys)
+        {
+            keys[MXCrossSigningKeyType.userSigning] = userIdentity.userSignedKeys;
+        }
+        _keys = keys.copy;
+        _trustLevel = userIdentity.trustLevel;
+    }
+    return self;
+}
 
 - (MXCrossSigningKey *)masterKeys
 {
@@ -66,7 +92,19 @@ NSString *const MXCrossSigningInfoTrustLevelDidChangeNotification = @"MXCrossSig
     {
         _userId = [aDecoder decodeObjectForKey:@"userId"];
         _keys = [aDecoder decodeObjectForKey:@"keys"];
-        _trustLevel = [aDecoder decodeObjectForKey:@"trustLevel"];
+        NSInteger version = [aDecoder decodeIntegerForKey:@"version"];
+        if (version == 1)
+        {
+            // Version 1 compressed two boolean flags into a single one, when restoring from this version
+            // we will distribute once again to two booleans as it is important to keep local vs cross-signed
+            // status for own user as local echo.
+            BOOL isVerified = [aDecoder decodeBoolForKey:@"isVerified"];
+            _trustLevel = [MXUserTrustLevel trustLevelWithCrossSigningVerified:isVerified locallyVerified:isVerified];
+        }
+        else
+        {
+            _trustLevel = [aDecoder decodeObjectForKey:@"trustLevel"];
+        }
     }
     return self;
 }
@@ -76,6 +114,7 @@ NSString *const MXCrossSigningInfoTrustLevelDidChangeNotification = @"MXCrossSig
     [aCoder encodeObject:_userId forKey:@"userId"];
     [aCoder encodeObject:_keys forKey:@"keys"];
     [aCoder encodeObject:_trustLevel forKey:@"trustLevel"];
+    [aCoder encodeInteger:2 forKey:@"version"];
 }
 
 

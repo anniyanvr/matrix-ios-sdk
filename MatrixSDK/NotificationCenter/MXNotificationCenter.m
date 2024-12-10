@@ -207,6 +207,7 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
                             {
                                 MXLogDebug(@"[MXNotificationCenter] Warning: There is no MXPushRuleConditionChecker to check condition of kind: %@", condition.kind);
                                 conditionsOk = NO;
+                                break; // Don't go further as we cannot guarantee that this rule matches
                             }
                         }
                         break;
@@ -397,7 +398,7 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
     }
 }
 
-- (void)enableRule:(MXPushRule*)pushRule isEnabled:(BOOL)enable
+- (void)enableRule:(MXPushRule*)pushRule isEnabled:(BOOL)enable completion:(nullable void (^)(NSError * _Nullable error))completion;
 {
     if (pushRule)
     {
@@ -426,10 +427,15 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
             
             [[NSNotificationCenter defaultCenter] postNotificationName:kMXNotificationCenterDidUpdateRules object:self userInfo:nil];
             
+            if (completion) {
+                completion(nil);
+            }
         } failure:^(NSError *error) {
-            
             [[NSNotificationCenter defaultCenter] postNotificationName:kMXNotificationCenterDidFailRulesUpdate object:self userInfo:@{kMXNotificationCenterErrorKey:error}];
             
+            if (completion) {
+                completion(error);
+            }
         }];
     }
 }
@@ -439,6 +445,7 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
                        notify:(BOOL)notify
                     soundName:(NSString*)soundName
                     highlight:(BOOL)highlight
+                   completion:(nullable void (^)(NSError * _Nullable error))completion
 {
     
     NSArray *actions = [self encodeActionsWithNotify:notify soundName:soundName highlight:highlight];
@@ -450,12 +457,20 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
         // Refresh locally rules
         [self refreshRules:^{
             [[NSNotificationCenter defaultCenter] postNotificationName:kMXNotificationCenterDidUpdateRules object:self userInfo:nil];
+            if (completion) {
+                completion(nil);
+            }
         } failure:^(NSError *error) {
             [[NSNotificationCenter defaultCenter] postNotificationName:kMXNotificationCenterDidFailRulesUpdate object:self userInfo:@{kMXNotificationCenterErrorKey:error}];
+            if (completion) {
+                completion(nil);
+            }
         }];
-    }
-                                                 failure:^(NSError *error) {
+    }  failure:^(NSError *error) {
         [[NSNotificationCenter defaultCenter] postNotificationName:kMXNotificationCenterDidFailRulesUpdate object:self userInfo:@{kMXNotificationCenterErrorKey:error}];
+        if (completion) {
+            completion(error);
+        }
     }];
 }
 
@@ -565,6 +580,7 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
                           highlight:(BOOL)highlight
 {
     NSMutableArray *actions = [NSMutableArray array];
+    // Support for MSC3987: The dont_notify push rule action is deprecated and replaced by an empty actions list.
     if (notify)
     {
         [actions addObject:@"notify"];
@@ -583,10 +599,6 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
             [actions addObject:@{@"set_tweak": @"highlight", @"value": @NO}];
         }
     }
-    else
-    {
-        [actions addObject:@"dont_notify"];
-    }
     return actions;
 }
 
@@ -601,7 +613,8 @@ NSString *const kMXNotificationCenterAllOtherRoomMessagesRuleID = @".m.rule.mess
         if (rule)
         {
             // Make sure this is not a rule to prevent from generating a notification
-            BOOL actionNotify = YES;
+            // Support for MSC3987: The dont_notify push rule action is deprecated and replaced by an empty actions list.
+            BOOL actionNotify = (rule.actions.count > 0);
             if (1 == rule.actions.count)
             {
                 MXPushRuleAction *action = rule.actions[0];

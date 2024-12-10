@@ -31,12 +31,26 @@
 #import "MXRoomSummaryStore.h"
 
 @class MXSpaceGraphData;
+@class MXStoreService;
+@class MXCapabilities;
+@class MXMatrixVersions;
 
 /**
  The `MXStore` protocol defines an interface that must be implemented in order to store
  Matrix data handled during a `MXSession`.
  */
-@protocol MXStore <NSObject, MXRoomSummaryStore>
+@protocol MXStore <NSObject>
+
+@property (nonatomic, readonly) id<MXRoomSummaryStore> _Nonnull roomSummaryStore;
+
+#pragma mark - Store Management
+
+/**
+ The store service that is managing this store.
+ */
+@property (nonatomic, weak, nullable) MXStoreService *storeService;
+
+@property (nonatomic, readonly, nonnull) NSArray<NSString*> *roomIds;
 
 #pragma mark - Room data
 
@@ -162,6 +176,26 @@
  */
 - (NSArray<MXEvent*>* _Nonnull)relationsForEvent:(nonnull NSString*)eventId inRoom:(nonnull NSString*)roomId relationType:(nonnull NSString*)relationType;
 
+/**
+ Set the room as unread, add the room to the unread list
+ 
+ @param roomId the id of the room.
+ */
+- (void)setUnreadForRoom:(nonnull NSString*)roomId;
+
+/**
+ Remove the room from unread list
+ 
+ @param roomId the id of the room.
+ */
+- (void)resetUnreadForRoom:(nonnull NSString*)roomId;
+
+/**
+ Set the room as unread
+ 
+ @param roomId the id of the room.
+ */
+- (BOOL)isRoomMarkedAsUnread:(nonnull NSString*)roomId;
 
 #pragma mark - Matrix users
 /**
@@ -215,12 +249,12 @@
 #pragma mark -
 /**
  Store the text message partially typed by the user but not yet sent.
- 
+
  @param roomId the id of the room.
- @param partialTextMessage the text to store. Nil to reset it.
+ @param partialAttributedTextMessage the text to store. Nil to reset it.
  */
 // @TODO(summary): Move to MXRoomSummary
-- (void)storePartialTextMessageForRoom:(nonnull NSString*)roomId partialTextMessage:(nonnull NSString*)partialTextMessage;
+- (void)storePartialAttributedTextMessageForRoom:(nonnull NSString*)roomId partialAttributedTextMessage:(nonnull NSAttributedString*)partialAttributedTextMessage;
 
 /**
  The text message typed by the user but not yet sent.
@@ -228,8 +262,7 @@
  @param roomId the id of the room.
  @return the text message. Can be nil.
  */
-- (NSString* _Nullable)partialTextMessageOfRoom:(nonnull NSString*)roomId;
-
+- (NSAttributedString* _Nullable)partialAttributedTextMessageOfRoom:(nonnull NSString*)roomId;
 
 /**
  Returns the receipts list for an event in a dedicated room.
@@ -237,11 +270,13 @@
  
  @param roomId The room Id.
  @param eventId The event Id.
+ @param threadId The thread Id. kMXEventTimelineMain for the main timeline.
  @param sort to sort them from the latest to the oldest
  @param completion Completion block containing the receipts for an event in a dedicated room.
  */
 - (void)getEventReceipts:(nonnull NSString*)roomId
                  eventId:(nonnull NSString*)eventId
+                threadId:(nonnull NSString*)threadId
                   sorted:(BOOL)sort
               completion:(nonnull void (^)(NSArray<MXReceiptData*> * _Nonnull))completion;
 
@@ -255,13 +290,23 @@
 - (BOOL)storeReceipt:(nonnull MXReceiptData*)receipt inRoom:(nonnull NSString*)roomId;
 
 /**
- Retrieve the receipt for a user in a room
+ Retrieve the receipt for a user within all threads in a room
  
  @param roomId The roomId
  @param userId The user identifier
+ @return all the currently stored receipts ordered by thread ID.
+ */
+- (nonnull NSDictionary<NSString *, MXReceiptData *> *)getReceiptsInRoom:(nonnull NSString*)roomId forUserId:(nonnull NSString*)userId;
+
+/**
+ Retrieve the receipt for a user in a room within a specific thread.
+ 
+ @param roomId The roomId
+ @param threadId The ID of the thread. kMXEventTimelineMain for the main timeline.
+ @param userId The user identifier
  @return the current stored receipt (nil by default).
  */
-- (MXReceiptData * _Nullable)getReceiptInRoom:(nonnull NSString*)roomId forUserId:(nonnull NSString*)userId;
+- (nullable MXReceiptData *)getReceiptInRoom:(nonnull NSString*)roomId threadId:(nonnull NSString*)threadId forUserId:(nonnull NSString*)userId;
 
 /**
  Load receipts for a room asynchronously.
@@ -278,10 +323,38 @@
  for a room may be higher than the returned value.
  
  @param roomId the room id.
+ @param threadId the thread id to count unread events in. Pass nil not to filter by any thread.
  @param types an array of event types strings (MXEventTypeString).
  @return The number of unread events which have their type listed in the provided array.
  */
-- (NSUInteger)localUnreadEventCount:(nonnull NSString*)roomId withTypeIn:(nullable NSArray*)types;
+- (NSUInteger)localUnreadEventCount:(nonnull NSString*)roomId threadId:(nullable NSString*)threadId withTypeIn:(nullable NSArray*)types;
+
+/**
+ Count the unread events wrote in the store per thread.
+ 
+ @discussion: The returned count is relative to the local storage. The actual unread messages
+ for a room may be higher than the returned value.
+ 
+ @param roomId the room id.
+ @param types an array of event types strings (MXEventTypeString).
+ @return The number of unread events per thread which have their type listed in the provided array.
+ */
+- (nonnull NSDictionary <NSString *, NSNumber *> *)localUnreadEventCountPerThread:(nonnull NSString*)roomId withTypeIn:(nullable NSArray*)types;
+
+/**
+ Incoming events since the last user receipt data.
+
+ @discussion: The returned count is relative to the local storage. The actual unread messages
+ for a room may be higher than the returned value.
+
+ @param roomId the room id.
+ @param threadId the thread id to consider events in. Pass nil not to filter by any thread.
+ @param types an array of event types strings to consider
+ @return Filtered events that came after the user receipt.
+ */
+- (nonnull NSArray<MXEvent*>*)newIncomingEventsInRoom:(nonnull NSString*)roomId
+                                             threadId:(nullable NSString*)threadId
+                                           withTypeIn:(nullable NSArray<MXEventTypeString>*)types;
 
 /**
  Indicate if the MXStore implementation stores data permanently.
@@ -310,6 +383,30 @@
  */
 - (void)storeHomeserverWellknown:(nonnull MXWellKnown*)homeserverWellknown;
 
+/**
+ The homeserver capabilities.
+ */
+@property (nonatomic, readonly) MXCapabilities * _Nullable homeserverCapabilities;
+
+/**
+ Store the homeserver capabilities.
+
+ @param homeserverCapabilities the homeserver capabilities to store.
+ */
+- (void)storeHomeserverCapabilities:(nonnull MXCapabilities*)homeserverCapabilities;
+
+/**
+ Supported Matrix versions by the homeserver.
+ */
+@property (nonatomic, readonly) MXMatrixVersions * _Nullable supportedMatrixVersions;
+
+/**
+ Store the supported Matrix versions.
+
+ @param supportedMatrixVersions the supported Matrix versions to store.
+ */
+- (void)storeSupportedMatrixVersions:(nonnull MXMatrixVersions*)supportedMatrixVersions;
+
 #pragma mark - Room Messages
 
 /**
@@ -328,6 +425,18 @@
  @param outgoingMessage the MXEvent object of the message.
  */
 - (void)storeOutgoingMessageForRoom:(nonnull NSString*)roomId outgoingMessage:(nonnull MXEvent*)outgoingMessage;
+
+/**
+ Remove all the messages sent before a specific timestamp in a room.
+ The state events are not removed during this operation. We keep them in the timeline.
+ This operation doesn't change the pagination token, and the flag indicating that the SDK has reached the end of pagination.
+ 
+ @param limitTs the timestamp from which the messages are kept.
+ @param roomId the id of the room.
+ 
+ @return YES if at least one event has been removed.
+ */
+- (BOOL)removeAllMessagesSentBefore:(uint64_t)limitTs inRoom:(nonnull NSString *)roomId;
 
 /**
  Remove all outgoing messages from a room.
@@ -470,6 +579,11 @@
 - (void)storeFilter:(nonnull MXFilterJSONModel*)filter withFilterId:(nonnull NSString*)filterId;
 
 /**
+ Retrieve a list of all stored filter ids.
+ */
+- (nonnull NSArray <NSString *> *)allFilterIds;
+
+/**
  Retrieve a filter with a given id.
 
  @param filterId the id of the filter.
@@ -490,6 +604,5 @@
 - (void)filterIdForFilter:(nonnull MXFilterJSONModel*)filter
                   success:(nonnull void (^)(NSString * _Nullable filterId))success
                   failure:(nullable void (^)(NSError * _Nullable error))failure;
-
 
 @end

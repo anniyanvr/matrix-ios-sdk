@@ -20,6 +20,7 @@
 #import "MXMemoryRoomStore.h"
 
 #import "MXTools.h"
+#import "MXMemoryRoomSummaryStore.h"
 
 @interface MXMemoryStore()
 {
@@ -29,14 +30,17 @@
     
     //  Execution queue for computationally expensive operations.
     dispatch_queue_t executionQueue;
-    NSMutableDictionary<NSString *, id<MXRoomSummaryProtocol>> *roomSummaries;
 }
 @end
 
 
 @implementation MXMemoryStore
 
-@synthesize eventStreamToken, userAccountData, syncFilterId, homeserverWellknown, areAllIdentityServerTermsAgreed;
+@synthesize roomSummaryStore;
+
+@synthesize storeService, eventStreamToken, userAccountData, syncFilterId, homeserverWellknown, areAllIdentityServerTermsAgreed;
+@synthesize homeserverCapabilities;
+@synthesize supportedMatrixVersions;
 
 - (instancetype)init
 {
@@ -45,10 +49,11 @@
     {
         roomStores = [NSMutableDictionary dictionary];
         roomOutgoingMessagesStores = [NSMutableDictionary dictionary];
-        roomReceiptsStores = [NSMutableDictionary dictionary];
+        roomThreadedReceiptsStores = [NSMutableDictionary dictionary];
         users = [NSMutableDictionary dictionary];
         groups = [NSMutableDictionary dictionary];
-        roomSummaries = [NSMutableDictionary dictionary];
+        roomUnreaded = [[NSMutableSet alloc] init];
+        roomSummaryStore = [[MXMemoryRoomSummaryStore alloc] init];
         maxUploadSize = -1;
         areAllIdentityServerTermsAgreed = NO;
         executionQueue = dispatch_queue_create("MXMemoryStoreExecutionQueue", DISPATCH_QUEUE_SERIAL);
@@ -78,6 +83,12 @@
     [roomStore replaceEvent:event];
 }
 
+- (BOOL)removeAllMessagesSentBefore:(uint64_t)limitTs inRoom:(nonnull NSString *)roomId
+{
+    MXMemoryRoomStore *roomStore = [self getOrCreateRoomStore:roomId];
+    return [roomStore removeAllMessagesSentBefore:limitTs];
+}
+
 - (BOOL)eventExistsWithEventId:(NSString *)eventId inRoom:(NSString *)roomId
 {
     return (nil != [self eventWithEventId:eventId inRoom:roomId]);
@@ -104,15 +115,18 @@
         [roomStores removeObjectForKey:roomId];
     }
     
-    if (roomReceiptsStores[roomId])
+    if (roomThreadedReceiptsStores[roomId])
     {
-        [roomReceiptsStores removeObjectForKey:roomId];
+        [roomThreadedReceiptsStores removeObjectForKey:roomId];
     }
+    
+    [roomSummaryStore removeSummaryOfRoom:roomId];
 }
 
 - (void)deleteAllData
 {
     [roomStores removeAllObjects];
+    [roomSummaryStore removeAllSummaries];
 }
 
 - (void)storePaginationTokenOfRoom:(NSString*)roomId andToken:(NSString*)token
@@ -164,21 +178,26 @@
     return [roomStore enumeratorForMessagesWithTypeIn:types];
 }
 
-- (void)storePartialTextMessageForRoom:(NSString *)roomId partialTextMessage:(NSString *)partialTextMessage
+- (void)storePartialAttributedTextMessageForRoom:(NSString *)roomId partialAttributedTextMessage:(NSAttributedString *)partialAttributedTextMessage
 {
     MXMemoryRoomStore *roomStore = [self getOrCreateRoomStore:roomId];
-    roomStore.partialTextMessage = partialTextMessage;
+    roomStore.partialAttributedTextMessage = partialAttributedTextMessage;
 }
 
-- (NSString *)partialTextMessageOfRoom:(NSString *)roomId
+- (NSAttributedString *)partialAttributedTextMessageOfRoom:(NSString *)roomId
 {
     MXMemoryRoomStore *roomStore = [self getOrCreateRoomStore:roomId];
-    return roomStore.partialTextMessage;
+    return roomStore.partialAttributedTextMessage;
+}
+
+- (void)stateOfRoom:(NSString *)roomId success:(void (^)(NSArray<MXEvent *> * _Nonnull))success failure:(void (^)(NSError * _Nonnull))failure
+{
+    success(@[]);
 }
 
 - (void)loadReceiptsForRoom:(NSString *)roomId completion:(void (^)(void))completion
 {
-    [self getOrCreateRoomReceiptsStore:roomId];
+    [self getOrCreateRoomThreadedReceiptsStore:roomId];
     
     if (completion)
     {
@@ -188,11 +207,11 @@
     }
 }
 
-- (void)getEventReceipts:(NSString *)roomId eventId:(NSString *)eventId sorted:(BOOL)sort completion:(void (^)(NSArray<MXReceiptData *> * _Nonnull))completion
+- (void)getEventReceipts:(NSString *)roomId eventId:(NSString *)eventId threadId:(NSString *)threadId sorted:(BOOL)sort completion:(void (^)(NSArray<MXReceiptData *> * _Nonnull))completion
 {
     [self loadReceiptsForRoom:roomId completion:^{
-        RoomReceiptsStore *receiptsStore = self->roomReceiptsStores[roomId];
-        
+        RoomReceiptsStore *receiptsStore = [self getOrCreateReceiptsStoreForRoomWithId:roomId threadId:threadId];
+
         if (receiptsStore)
         {
             @synchronized (receiptsStore)
@@ -228,7 +247,26 @@
 
 - (BOOL)storeReceipt:(MXReceiptData*)receipt inRoom:(NSString*)roomId
 {
-    RoomReceiptsStore *receiptsStore = [self getOrCreateRoomReceiptsStore:roomId];
+    if (!receipt.threadId)
+    {
+        // Unthreaded RR are stored for main timeline and all threads.
+        RoomThreadedReceiptsStore *threadedStore = [self getOrCreateRoomThreadedReceiptsStore:roomId];
+        
+        BOOL isStored = [self storeReceipt:receipt inRoom:roomId forThread:kMXEventTimelineMain];
+        
+        for (NSString *threadId in threadedStore.allKeys) {
+            isStored |= [self storeReceipt:receipt inRoom:roomId forThread:threadId];
+        }
+        
+        return isStored;
+    }
+    
+    return [self storeReceipt:receipt inRoom:roomId forThread:receipt.threadId];
+}
+
+- (BOOL)storeReceipt:(MXReceiptData*)receipt inRoom:(NSString*)roomId forThread:(NSString*)threadId
+{
+    RoomReceiptsStore *receiptsStore = [self getOrCreateReceiptsStoreForRoomWithId:roomId threadId:threadId];
     
     MXReceiptData *curReceipt = receiptsStore[receipt.userId];
     
@@ -245,10 +283,10 @@
     return false;
 }
 
-- (MXReceiptData *)getReceiptInRoom:(NSString*)roomId forUserId:(NSString*)userId
+- (MXReceiptData *)getReceiptInRoom:(NSString *)roomId threadId:(NSString *)threadId forUserId:(NSString *)userId
 {
-    RoomReceiptsStore *receiptsStore = [self getOrCreateRoomReceiptsStore:roomId];
-
+    RoomReceiptsStore *receiptsStore = [self getOrCreateReceiptsStoreForRoomWithId:roomId threadId:threadId];
+    
     if (receiptsStore)
     {
         MXReceiptData* data = receiptsStore[userId];
@@ -261,39 +299,115 @@
     return nil;
 }
 
-- (NSUInteger)localUnreadEventCount:(NSString*)roomId withTypeIn:(NSArray*)types
+- (NSMutableDictionary<NSString *, MXReceiptData *> *)getReceiptsInRoom:(NSString*)roomId forUserId:(NSString*)userId
 {
-    // @TODO: This method is only logic which could be moved to MXRoom
-    MXMemoryRoomStore* store = [self getOrCreateRoomStore:roomId];
-    RoomReceiptsStore *receiptsStore = [self getOrCreateRoomReceiptsStore:roomId];
-    NSUInteger count = 0;
+    NSMutableDictionary<NSString *, MXReceiptData *> *receiptsData = [NSMutableDictionary new];
+    RoomThreadedReceiptsStore *threadsStore = [self getOrCreateRoomThreadedReceiptsStore:roomId];
     
-    if (store && receiptsStore)
+    if (threadsStore)
     {
-        MXReceiptData* data = [receiptsStore objectForKey:credentials.userId];
-        
-        if (data)
-        {
-            // Check the current stored events (by ignoring oneself events)
-            NSArray *array = [store eventsAfter:data.eventId except:credentials.userId withTypeIn:[NSSet setWithArray:types]];
-            
-            // Check whether these unread events have not been redacted.
-            for (MXEvent *event in array)
+        for (NSString *threadId in [threadsStore allKeys]) {
+            MXReceiptData* data = threadsStore[threadId][userId];
+            if (data)
             {
-                if (event.redactedBecause == nil)
-                {
-                    count ++;
-                }
+                receiptsData[threadId] = data;
             }
         }
     }
-   
-    return count;
+    
+    return receiptsData;
+}
+
+- (void)setUnreadForRoom:(nonnull NSString*)roomId;
+{
+    [roomUnreaded addObject:roomId];
+}
+
+- (void)resetUnreadForRoom:(nonnull NSString*)roomId;
+{
+    [roomUnreaded removeObject:roomId];
+}
+
+- (BOOL)isRoomMarkedAsUnread:(nonnull NSString*)roomId
+{
+    return [roomUnreaded containsObject:roomId];
+}
+
+- (NSUInteger)localUnreadEventCount:(NSString*)roomId threadId:(NSString *)threadId withTypeIn:(NSArray*)types
+{
+    NSArray<MXEvent*> *newEvents = [self newIncomingEventsInRoom:roomId threadId:threadId withTypeIn:types];
+    __block NSUInteger result = 0;
+    // Check whether these unread events have not been redacted.
+    [newEvents enumerateObjectsUsingBlock:^(MXEvent * _Nonnull event, NSUInteger idx, BOOL * _Nonnull stop)
+    {
+        if (!event.isRedactedEvent)
+        {
+            result++;
+        }
+    }];
+    return result;
+}
+
+- (NSDictionary <NSString *, NSNumber *> *)localUnreadEventCountPerThread:(nonnull NSString*)roomId withTypeIn:(nullable NSArray*)types
+{
+    NSMutableDictionary <NSString *, NSNumber *> *unreadEventCountPerThread = [NSMutableDictionary dictionary];
+    
+    RoomThreadedReceiptsStore *threadedStore = [self getOrCreateRoomThreadedReceiptsStore:roomId];
+    for (NSString *threadId in threadedStore.allKeys)
+    {
+        NSUInteger unreadCount = [self localUnreadEventCount:roomId threadId:threadId withTypeIn:types];
+        unreadEventCountPerThread[threadId] = @(unreadCount);
+    }
+    
+    return unreadEventCountPerThread;
+}
+
+- (NSArray<MXEvent *> *)newIncomingEventsInRoom:(NSString *)roomId
+                                       threadId:(NSString *)threadId
+                                     withTypeIn:(NSArray<MXEventTypeString> *)types
+{
+    MXMemoryRoomStore *store = [self getOrCreateRoomStore:roomId];
+    RoomReceiptsStore *receiptsStore = [self getOrCreateReceiptsStoreForRoomWithId:roomId threadId:threadId];
+
+    if (store == nil || receiptsStore == nil)
+    {
+        return @[];
+    }
+
+    MXReceiptData *data = [receiptsStore objectForKey:credentials.userId];
+
+    if (data == nil)
+    {
+        if (receiptsStore.count > 0)
+        {
+            return [store eventsInThreadWithThreadId:threadId except:credentials.userId withTypeIn:[NSSet setWithArray:types]];
+        }
+        else
+        {
+            return @[];
+        }
+    }
+
+    // Check the current stored events (by ignoring oneself events)
+    return [store eventsAfter:data.eventId
+                     threadId:threadId
+                       except:credentials.userId
+                   withTypeIn:[NSSet setWithArray:types]];
 }
 
 - (void)storeHomeserverWellknown:(nonnull MXWellKnown *)wellknown
 {
     homeserverWellknown = wellknown;
+}
+
+- (void)storeHomeserverCapabilities:(MXCapabilities *)capabilities
+{
+    homeserverCapabilities = capabilities;
+}
+
+- (void)storeSupportedMatrixVersions:(MXMatrixVersions *)supportedMatrixVersions
+{
+    supportedMatrixVersions = supportedMatrixVersions;
 }
 
 - (NSInteger)maxUploadSize
@@ -317,6 +431,10 @@
     return NO;
 }
 
+- (NSArray<NSString *> *)roomIds
+{
+    return roomStores.allKeys;
+}
 
 #pragma mark - Matrix users
 - (void)storeUser:(MXUser *)user
@@ -402,6 +520,11 @@
     filters[filterId] = filter.jsonString;
 }
 
+- (NSArray<NSString *> *)allFilterIds
+{
+    return filters.allKeys;
+}
+
 - (void)filterWithFilterId:(nonnull NSString*)filterId
                    success:(nonnull void (^)(MXFilterJSONModel * _Nullable filter))success
                    failure:(nullable void (^)(NSError * _Nullable error))failure
@@ -473,36 +596,28 @@
     return store;
 }
 
-- (RoomReceiptsStore *)getOrCreateRoomReceiptsStore:(NSString *)roomId
+- (RoomThreadedReceiptsStore*)getOrCreateRoomThreadedReceiptsStore:(NSString*)roomId
 {
-    RoomReceiptsStore *store = roomReceiptsStores[roomId];
+    RoomThreadedReceiptsStore *store = roomThreadedReceiptsStores[roomId];
     if (nil == store)
     {
-        store = [RoomReceiptsStore new];
-        roomReceiptsStores[roomId] = store;
+        store = [RoomThreadedReceiptsStore new];
+        roomThreadedReceiptsStores[roomId] = store;
     }
     return store;
 }
 
-#pragma mark - MXRoomSummaryStore
-
-- (NSArray<NSString *> *)rooms
+- (RoomReceiptsStore*)getOrCreateReceiptsStoreForRoomWithId:(NSString*)roomId threadId:(NSString*)threadId
 {
-    return roomStores.allKeys;
-}
-
-- (void)storeSummaryForRoom:(NSString *)roomId summary:(id<MXRoomSummaryProtocol>)summary
-{
-    roomSummaries[roomId] = summary;
-    if (roomStores[roomId] == nil)
+    NSString *threadKey = threadId ?: kMXEventTimelineMain;
+    RoomThreadedReceiptsStore *threadedStore = [self getOrCreateRoomThreadedReceiptsStore:roomId];
+    RoomReceiptsStore *store = threadedStore[threadKey];
+    if (!store)
     {
-        roomStores[roomId] = [[MXMemoryRoomStore alloc] init];
+        store = [RoomReceiptsStore new];
+        threadedStore[threadKey] = store;
     }
-}
-
-- (id<MXRoomSummaryProtocol>)summaryOfRoom:(NSString *)roomId
-{
-    return roomSummaries[roomId];
+    return store;
 }
 
 @end

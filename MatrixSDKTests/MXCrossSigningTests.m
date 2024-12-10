@@ -19,13 +19,12 @@
 #import "MatrixSDKTestsData.h"
 #import "MatrixSDKTestsE2EData.h"
 
-#import "MXCrypto_Private.h"
-#import "MXCrossSigning_Private.h"
 #import "MXCrossSigningInfo_Private.h"
 #import "MXCrossSigningTools.h"
 
 #import "MXFileStore.h"
 #import "MXNoStore.h"
+#import "MatrixSDKTestsSwiftHeader.h"
 
 
 // Do not bother with retain cycles warnings in tests
@@ -33,7 +32,7 @@
 #pragma clang diagnostic ignored "-Warc-retain-cycles"
 
 // Pen test
-@interface MXCrossSigning ()
+@interface MXLegacyCrossSigning ()
 - (MXCrossSigningInfo*)createKeys:(NSDictionary<NSString*, NSData*> * _Nonnull * _Nullable)outPrivateKeys;
 @end
 
@@ -70,6 +69,8 @@
     {
         [[NSNotificationCenter defaultCenter] removeObserver:observer];
     }
+    
+    [super tearDown];
 }
 
 
@@ -227,108 +228,6 @@
     XCTAssertTrue([key.JSONDictionary isEqualToDictionary:JSONDict], "\n%@\nvs\n%@", key.JSONDictionary, JSONDict);
 }
 
-// Test [MXCrossSigningTools testPkVerifyObject:]
-- (void)testPkVerifyObject
-{
-    MXCrossSigningTools *crossSigningTools = [MXCrossSigningTools new];
-
-    // Data taken from js-sdk tests to check cross-platform compatibility
-    NSDictionary *JSONDict = @{
-                               @"user_id": @"@alice:example.com",
-                               @"usage": @[@"self-signing"],
-                               @"keys": @{
-                                       @"ed25519:EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ":
-                                           @"EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ",
-                                       },
-                               @"signatures": @{
-                                       @"@alice:example.com": @{
-                                               @"ed25519:nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk":
-                                                   @"Wqx/HXR851KIi8/u/UX+fbAMtq9Uj8sr8FsOcqrLfVYa6lAmbXsVhfy4AlZ3dnEtjgZx0U0QDrghEn2eYBeOCA",
-                                               },
-                                       }
-                               };
-
-    NSError *error;
-    BOOL result = [crossSigningTools pkVerifyObject:JSONDict userId:@"@alice:example.com" publicKey:@"nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk" error:&error];
-
-    XCTAssertTrue(result);
-    XCTAssertNil(error);
-
-
-    NSDictionary *JSONDictWithCorruptedSignature = @{
-                                                     @"user_id": @"@alice:example.com",
-                                                     @"usage": @[@"self-signing"],
-                                                     @"keys": @{
-                                                             @"ed25519:EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ":
-                                                                 @"EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ",
-                                                             },
-                                                     @"signatures": @{
-                                                             @"@alice:example.com": @{
-                                                                     @"ed25519:nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk":
-                                                                         @"Bug/HXR851KIi8/u/UX+fbAMtq9Uj8sr8FsOcqrLfVYa6lAmbXsVhfy4AlZ3dnEtjgZx0U0QDrghEn2eYBeOCA",
-                                                                     },
-                                                             }
-                                                     };
-
-    result = [crossSigningTools pkVerifyObject:JSONDictWithCorruptedSignature userId:@"@alice:example.com" publicKey:@"nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk" error:&error];
-
-    XCTAssertFalse(result);
-    XCTAssertNotNil(error);
-}
-
-// Test [MXCrossSigningTools pkVerifyKey:]
-- (void)testPkVerifyKey
-{
-    MXCrossSigningTools *crossSigningTools = [MXCrossSigningTools new];
-
-    // Data taken from js-sdk tests to check cross-platform compatibility
-    NSDictionary *JSONDict = @{
-                               @"user_id": @"@alice:example.com",
-                               @"usage": @[@"self-signing"],
-                               @"keys": @{
-                                       @"ed25519:EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ":
-                                           @"EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ",
-                                       },
-                               @"signatures": @{
-                                       @"@alice:example.com": @{
-                                               @"ed25519:nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk":
-                                                   @"Wqx/HXR851KIi8/u/UX+fbAMtq9Uj8sr8FsOcqrLfVYa6lAmbXsVhfy4AlZ3dnEtjgZx0U0QDrghEn2eYBeOCA",
-                                               },
-                                       }
-                               };
-
-    MXCrossSigningKey *key;
-    MXJSONModelSetMXJSONModel(key, MXCrossSigningKey, JSONDict);
-
-    NSError *error;
-    BOOL result = [crossSigningTools pkVerifyKey:key userId:@"@alice:example.com" publicKey:@"nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk" error:&error];
-
-    XCTAssertTrue(result);
-    XCTAssertNil(error);
-
-
-    NSDictionary *JSONDictWithCorruptedSignature = @{
-                                                     @"user_id": @"@alice:example.com",
-                                                     @"usage": @[@"self-signing"],
-                                                     @"keys": @{
-                                                             @"ed25519:EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ":
-                                                                 @"EmkqvokUn8p+vQAGZitOk4PWjp7Ukp3txV2TbMPEiBQ",
-                                                             },
-                                                     @"signatures": @{
-                                                             @"@alice:example.com": @{
-                                                                     @"ed25519:nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk":
-                                                                         @"Bug/HXR851KIi8/u/UX+fbAMtq9Uj8sr8FsOcqrLfVYa6lAmbXsVhfy4AlZ3dnEtjgZx0U0QDrghEn2eYBeOCA",
-                                                                     },
-                                                             }
-                                                     };
-    MXJSONModelSetMXJSONModel(key, MXCrossSigningKey, JSONDictWithCorruptedSignature);
-
-    result = [crossSigningTools pkVerifyKey:key userId:@"@alice:example.com" publicKey:@"nqOvzeuGWT/sRx3h7+MHoInYj3Uk2LD/unI9kDYcHwk" error:&error];
-
-    XCTAssertFalse(result);
-    XCTAssertNotNil(error);
-}
-
 // - Create Alice
 // - Bootstrap cross-signing on Alice using password
 // -> Cross-signing must be bootstrapped
@@ -359,7 +258,7 @@
             XCTAssertTrue(aliceDevice1Trust.isCrossSigningVerified);
             
             // -> Alice must see their cross-signing info trusted
-            MXCrossSigningInfo *aliceCrossSigningInfo = [aliceSession.crypto crossSigningKeysForUser:aliceSession.myUserId];
+            MXCrossSigningInfo *aliceCrossSigningInfo = [aliceSession.crypto.crossSigning crossSigningKeysForUser:aliceSession.myUserId];
             XCTAssertNotNil(aliceCrossSigningInfo);
             XCTAssertTrue(aliceCrossSigningInfo.trustLevel.isVerified);
             XCTAssertTrue(aliceCrossSigningInfo.trustLevel.isLocallyVerified);
@@ -423,7 +322,7 @@
                                 XCTAssertFalse(newAliceSession.crypto.crossSigning.canCrossSign);
                                 
                                 // - Let's wait for the magic of gossip to happen
-                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
 
                                     // -> Cross-signing should be fully enabled
                                     XCTAssertEqual(newAliceSession.crypto.crossSigning.state, MXCrossSigningStateCanCrossSign);
@@ -452,78 +351,6 @@
                     XCTFail(@"Cannot set up intial test conditions - error: %@", error);
                     [expectation fulfill];
                 }];
-            }];
-            
-        } failure:^(NSError *error) {
-            XCTFail(@"Cannot set up intial test conditions - error: %@", error);
-            [expectation fulfill];
-        }];
-    }];
-}
-
-//
-// Verify that a verified device gets cross-signing private keys so that it can cross-sign.
-//
-// - Bootstrap cross-signing on a 1st device
-// - Create a 2nd devices
-// - Make each device trust each other
-//   This simulates a self verification and trigger cross-signing behind the shell
-// - The 2nd device requests cross-signing keys from the 1st one
-// -> The 2nd device should be able to cross-sign now
-// -> The 2nd device must have all cross-signing private keys
-- (void)testPrivateKeysGossiping
-{
-    // - Create Alice
-    [matrixSDKTestsE2EData doE2ETestWithBobAndAlice:self readyToTest:^(MXSession *bobSession, MXSession *aliceSession, XCTestExpectation *expectation) {
-        
-        // - Bootstrap cross-signing on a 1st device
-        [aliceSession.crypto.crossSigning setupWithPassword:MXTESTS_ALICE_PWD success:^{
-            XCTAssertEqual(aliceSession.crypto.crossSigning.state, MXCrossSigningStateCanCrossSign);
-            
-            // - Create a 2nd device
-            [matrixSDKTestsE2EData loginUserOnANewDevice:self credentials:aliceSession.matrixRestClient.credentials withPassword:MXTESTS_ALICE_PWD onComplete:^(MXSession *newAliceSession) {
-                
-                // - Make each device trust each other
-                //   This simulates a self verification and trigger cross-signing behind the shell
-                [newAliceSession.crypto setDeviceVerification:MXDeviceVerified forDevice:aliceSession.matrixRestClient.credentials.deviceId ofUser:aliceSession.matrixRestClient.credentials.userId success:^{
-                    
-                    [aliceSession.crypto setDeviceVerification:MXDeviceVerified forDevice:newAliceSession.matrixRestClient.credentials.deviceId ofUser:aliceSession.matrixRestClient.credentials.userId success:^{
-                        
-                            [newAliceSession.crypto.crossSigning refreshStateWithSuccess:^(BOOL stateUpdated) {
-
-                                XCTAssertEqual(newAliceSession.crypto.crossSigning.state, MXCrossSigningStateTrustCrossSigning);
-
-                                // - The 2nd device requests cross-signing keys from the 1st one
-                                [newAliceSession.crypto.crossSigning requestPrivateKeysToDeviceIds:nil success:^{
-                                } onPrivateKeysReceived:^{
-
-                                    // -> The 2nd device should be able to cross-sign now
-                                    XCTAssertEqual(newAliceSession.crypto.crossSigning.state, MXCrossSigningStateCanCrossSign);
-                                    
-                                    // -> The 2nd device must have all cross-signing private keys
-                                    XCTAssertTrue(newAliceSession.crypto.crossSigning.hasAllPrivateKeys);
-                                    [expectation fulfill];
-
-                                } failure:^(NSError * _Nonnull error) {
-                                    XCTFail(@"The operation should not fail - NSError: %@", error);
-                                    [expectation fulfill];
-                                }];
-
-                            } failure:^(NSError * _Nonnull error) {
-                                XCTFail(@"Cannot set up intial test conditions - error: %@", error);
-                                [expectation fulfill];
-                            }];
-                        
-                        } failure:^(NSError * _Nonnull error) {
-                            XCTFail(@"Cannot set up intial test conditions - error: %@", error);
-                            [expectation fulfill];
-                        }];
-                        
-                    } failure:^(NSError * _Nonnull error) {
-                        XCTFail(@"Cannot set up intial test conditions - error: %@", error);
-                        [expectation fulfill];
-                    }];
-
             }];
             
         } failure:^(NSError *error) {
@@ -616,43 +443,6 @@
             XCTFail(@"The operation should not fail - NSError: %@", error);
             [expectation fulfill];
         }];
-    }];
-}
-
-// Check MXCrossSigningInfo storage in the crypto store
-// - Create Alice's cross-signing keys
-// - Store their keys and retrieve them
-// - Update keys test
-- (void)testMXCrossSigningInfoStorage
-{
-    // - Set up the scenario with alice with cross-signing keys
-    [matrixSDKTestsE2EData doE2ETestWithBobAndAlice:self readyToTest:^(MXSession *bobSession, MXSession *aliceSession, XCTestExpectation *expectation) {
-
-        NSString *aliceUserId = aliceSession.matrixRestClient.credentials.userId;
-
-        // - Create Alice's cross-signing keys
-        NSDictionary<NSString*, NSData*> *privateKeys;
-        MXCrossSigningInfo *keys = [aliceSession.crypto.crossSigning createKeys:&privateKeys];
-
-        // - Store their keys and retrieve them
-        [aliceSession.crypto.store storeCrossSigningKeys:keys];
-        MXCrossSigningInfo *storedKeys = [aliceSession.crypto.store crossSigningKeysForUser:aliceUserId];
-        XCTAssertNotNil(storedKeys);
-
-        XCTAssertEqualObjects(storedKeys.userId, keys.userId);
-        XCTAssertFalse(storedKeys.trustLevel.isVerified);
-        XCTAssertEqual(storedKeys.keys.count, keys.keys.count);
-        XCTAssertEqualObjects(storedKeys.masterKeys.JSONDictionary, keys.masterKeys.JSONDictionary);
-        XCTAssertEqualObjects(storedKeys.selfSignedKeys.JSONDictionary, keys.selfSignedKeys.JSONDictionary);
-        XCTAssertEqualObjects(storedKeys.userSignedKeys.JSONDictionary, keys.userSignedKeys.JSONDictionary);
-
-        // - Update keys test
-        [keys updateTrustLevel:[MXUserTrustLevel trustLevelWithCrossSigningVerified:YES locallyVerified:NO]];
-        [aliceSession.crypto.store storeCrossSigningKeys:keys];
-        storedKeys = [aliceSession.crypto.store crossSigningKeysForUser:aliceUserId];
-        XCTAssertTrue(storedKeys.trustLevel.isVerified);
-
-        [expectation fulfill];
     }];
 }
 
@@ -830,7 +620,7 @@
 
         // - Bob sends a message
         MXRoom *roomFromBobPOV = [bobSession roomWithRoomId:roomId];
-        [roomFromBobPOV sendTextMessage:@"An e2e message" success:^(NSString *eventId) {
+        [roomFromBobPOV sendTextMessage:@"An e2e message" threadId:nil success:^(NSString *eventId) {
 
             // -> This just must work
             [expectation fulfill];
@@ -854,7 +644,7 @@
 
         // - Bob sends a message
         MXRoom *roomFromBobPOV = [bobSession roomWithRoomId:roomId];
-        [roomFromBobPOV sendTextMessage:@"An e2e message" success:^(NSString *eventId) {
+        [roomFromBobPOV sendTextMessage:@"An e2e message" threadId:nil success:^(NSString *eventId) {
 
             XCTFail(@"The operation must fail");
             [expectation fulfill];
@@ -890,7 +680,7 @@
 
                 // - Bob sends a message
                 MXRoom *roomFromBobPOV = [bobSession roomWithRoomId:roomId];
-                [roomFromBobPOV sendTextMessage:@"An e2e message" success:^(NSString *eventId) {
+                [roomFromBobPOV sendTextMessage:@"An e2e message" threadId:nil success:^(NSString *eventId) {
 
                     XCTFail(@"The operation must fail");
                     [expectation fulfill];
@@ -989,7 +779,6 @@
             
             NSString *bobUserId = bobSession.myUserId;
             NSString *bobDeviceId = bobSession.myDeviceId;
-
             
             // - Alice self-verifies it with Alice2
             // This simulates a self verification and trigger cross-signing behind the shell
@@ -998,7 +787,7 @@
                     [aliceSession3.crypto setUserVerification:YES forUser:aliceUserId success:^{
                         
                         // Wait a bit to make background requests for cross-signing happen
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                             
                             // -> Alice3 should see all devices in the party as trusted thanks to cross-signing
                             XCTAssertEqual(aliceSession3.crypto.crossSigning.state, MXCrossSigningStateCanCrossSign);
@@ -1015,12 +804,12 @@
                             
                             // -> Alice3 should see Bob as trusted thanks to cross-signing
                             [aliceSession3.crypto downloadKeys:@[bobUserId] forceDownload:NO success:^(MXUsersDevicesMap<MXDeviceInfo *> *usersDevicesInfoMap, NSDictionary<NSString *,MXCrossSigningInfo *> *crossSigningKeysMap) {
-                                
+
                                 XCTAssertTrue([aliceSession3.crypto trustLevelForUser:bobUserId].isCrossSigningVerified);
                                 XCTAssertTrue([aliceSession3.crypto deviceTrustLevelForDevice:bobDeviceId ofUser:bobUserId].isCrossSigningVerified);
-                                
+
                                 [expectation fulfill];
-                                
+
                             } failure:^(NSError *error) {
                                 XCTFail(@"Cannot set up intial test conditions - error: %@", error);
                                 [expectation fulfill];
@@ -1172,7 +961,7 @@
             newDeviceId = newAliceSession.matrixRestClient.credentials.deviceId;
             
             // - Cross-sign this new device
-            [aliceSession.crypto.crossSigning crossSignDeviceWithDeviceId:newDeviceId success:^{
+            [aliceSession.crypto.crossSigning crossSignDeviceWithDeviceId:newDeviceId userId:newAliceSession.matrixRestClient.credentials.userId success:^{
                 
                 // Intermediate check
                 MXDeviceTrustLevel *aliceDevice2Trust = [aliceSession.crypto deviceTrustLevelForDevice:newDeviceId ofUser:aliceSession.myUserId];

@@ -34,11 +34,10 @@ typedef NS_ENUM(NSInteger, MXKeyVerificationTransport) {
     MXKeyVerificationTransportDirectMessage,
 };
 
-
 /**
  An handler on an interactive device verification.
  */
-@interface MXKeyVerificationTransaction: NSObject
+@protocol MXKeyVerificationTransaction <NSObject>
 
 /**
  The transaction id.
@@ -54,17 +53,7 @@ typedef NS_ENUM(NSInteger, MXKeyVerificationTransport) {
 /**
  YES for an incoming verification request.
  */
-@property (nonatomic) BOOL isIncoming;
-
-/**
- The creation date.
- */
-@property (nonatomic, strong) NSDate *creationDate;
-
-/**
- The other user device.
- */
-@property (nonatomic, readonly) MXDeviceInfo *otherDevice;
+@property (nonatomic, readonly) BOOL isIncoming;
 
 /**
  The other user id.
@@ -79,12 +68,17 @@ typedef NS_ENUM(NSInteger, MXKeyVerificationTransport) {
 /**
  The cancellation reason, if any.
  */
-@property (nonatomic, nullable) MXTransactionCancelCode *reasonCancelCode;
+@property (nonatomic, readonly, nullable) MXTransactionCancelCode *reasonCancelCode;
 
 /**
  The occured error (like network error), if any.
  */
-@property (nonatomic, nullable) NSError *error;
+@property (nonatomic, readonly, nullable) NSError *error;
+
+#pragma mark Direct message
+
+@property (nonatomic, nullable, readonly) NSString *dmRoomId;
+@property (nonatomic, nullable, readonly) NSString *dmEventId;
 
 /**
  Cancel this transaction.
@@ -106,10 +100,6 @@ typedef NS_ENUM(NSInteger, MXKeyVerificationTransport) {
 
 
 #pragma mark - Transport layer
-#pragma mark Direct message
-
-@property (nonatomic, nullable, readonly) NSString *dmRoomId;
-@property (nonatomic, nullable, readonly) NSString *dmEventId;
 
 @end
 

@@ -32,6 +32,8 @@ static NSString* const kMXLoginFlowTypeKey = @"type";
 
 #pragma mark - Implementation
 
+#warning File has not been annotated with nullability, see MX_ASSUME_MISSING_NULLABILITY_BEGIN
+
 @implementation MXPublicRoom
 
 + (id)modelFromJSON:(NSDictionary *)JSONDictionary
@@ -80,6 +82,25 @@ static NSString* const kMXLoginFlowTypeKey = @"type";
     
     return displayname;
 }
+
+- (NSDictionary *)JSONDictionary
+{
+    NSMutableDictionary *jsonDictionary = [NSMutableDictionary dictionary];
+    
+    if (_roomId) { jsonDictionary[@"room_id"] = _roomId; }
+    if (_name) { jsonDictionary[@"name"] = _name; }
+    if (_aliases) { jsonDictionary[@"aliases"] = _aliases; }
+    if (_canonicalAlias) { jsonDictionary[@"canonical_alias"] = _canonicalAlias; }
+    if (_topic) { jsonDictionary[@"topic"] = _topic; }
+    jsonDictionary[@"num_joined_members"] = @(_numJoinedMembers);
+    jsonDictionary[@"world_readable"] = @(_worldReadable);
+    jsonDictionary[@"guest_can_join"] = @(_guestCanJoin);
+    if (_avatarUrl) { jsonDictionary[@"avatar_url"] = _avatarUrl; }
+    if (_roomTypeString) { jsonDictionary[@"room_type"] = _roomTypeString; }
+
+    return jsonDictionary.copy;
+}
+
 @end
 
 
@@ -119,7 +140,7 @@ NSString *const kMXLoginIdentifierTypePhone = @"m.id.phone";
 
 + (instancetype)modelFromJSON:(NSDictionary *)JSONDictionary
 {
-    MXLoginFlow *loginFlow = [self new];    
+    MXLoginFlow *loginFlow = [self new];
     if (loginFlow)
     {
         MXJSONModelSetString(loginFlow.type, JSONDictionary[kMXLoginFlowTypeKey]);
@@ -127,6 +148,21 @@ NSString *const kMXLoginIdentifierTypePhone = @"m.id.phone";
     }
     
     return loginFlow;
+}
+
+@end
+
+@implementation MXUsernameAvailability
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXUsernameAvailability *availability = [[MXUsernameAvailability alloc] init];
+    if (availability)
+    {
+        MXJSONModelSetBoolean(availability.available, JSONDictionary[@"available"]);
+    }
+    
+    return availability;
 }
 
 @end
@@ -204,6 +240,8 @@ NSString *const kMXLoginIdentifierTypePhone = @"m.id.phone";
         MXJSONModelSetString(loginResponse.homeserver, JSONDictionary[@"home_server"]);
         MXJSONModelSetString(loginResponse.userId, JSONDictionary[@"user_id"]);
         MXJSONModelSetString(loginResponse.accessToken, JSONDictionary[@"access_token"]);
+        MXJSONModelSetUInt64(loginResponse.expiresInMs, JSONDictionary[@"expires_in_ms"]);
+        MXJSONModelSetString(loginResponse.refreshToken, JSONDictionary[@"refresh_token"]);
         MXJSONModelSetString(loginResponse.deviceId, JSONDictionary[@"device_id"]);
         MXJSONModelSetMXJSONModel(loginResponse.wellknown, MXWellKnown, JSONDictionary[@"well_known"]);
         
@@ -544,6 +582,35 @@ NSString *const kMXPresenceOffline = @"offline";
 
 @end
 
+@interface MXLoginToken()
+
+@property (nonatomic) NSDictionary *json;
+
+@end
+
+@implementation MXLoginToken
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXLoginToken *loginToken = [[MXLoginToken alloc] init];
+    if (loginToken)
+    {
+        MXJSONModelSetString(loginToken.token, JSONDictionary[@"login_token"]);
+        MXJSONModelSetUInt64(loginToken.expiresIn, JSONDictionary[@"expires_in"]);
+
+        MXJSONModelSetDictionary(loginToken.json, JSONDictionary);
+    }
+    return loginToken;
+}
+
+- (NSDictionary *)JSONDictionary
+{
+    return _json;
+}
+
+@end
+
+
 
 NSString *const kMXPushRuleActionStringNotify       = @"notify";
 NSString *const kMXPushRuleActionStringDontNotify   = @"dont_notify";
@@ -766,7 +833,6 @@ NSString *const kMXPushRuleConditionStringSenderNotificationPermission  = @"send
 @implementation MXPushRulesResponse
 
 NSString *const kMXPushRuleScopeStringGlobal = @"global";
-NSString *const kMXPushRuleScopeStringDevice = @"device";
 
 + (id)modelFromJSON:(NSDictionary *)JSONDictionary
 {
@@ -777,8 +843,6 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
         {
             pushRulesResponse.global = [MXPushRulesSet modelFromJSON:JSONDictionary[kMXPushRuleScopeStringGlobal] withScope:kMXPushRuleScopeStringGlobal];
         }
-
-        // TODO support device rules
 
         pushRulesResponse->JSONDictionary = JSONDictionary;
     }
@@ -1027,11 +1091,21 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
 
 #pragma mark - Crypto
 
+@interface MXKeysUploadResponse ()
+
+/**
+ The original JSON used to create the response model
+ */
+@property (nonatomic, copy) NSDictionary *responseJSON;
+@end
+
 @implementation MXKeysUploadResponse
 
 + (id)modelFromJSON:(NSDictionary *)JSONDictionary
 {
     MXKeysUploadResponse *keysUploadResponse = [[MXKeysUploadResponse alloc] init];
+    keysUploadResponse.responseJSON = JSONDictionary;
+    
     if (keysUploadResponse)
     {
         MXJSONModelSetDictionary(keysUploadResponse.oneTimeKeyCounts, JSONDictionary[@"one_time_key_counts"]);
@@ -1044,6 +1118,14 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
     return [((NSNumber*)_oneTimeKeyCounts[algorithm]) unsignedIntegerValue];
 }
 
+- (NSDictionary *)JSONDictionary
+{
+    return self.responseJSON;
+}
+
+@end
+
+@interface MXKeysQueryResponse ()
 @end
 
 @implementation MXKeysQueryResponse
@@ -1134,6 +1216,138 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
     return keys;
 }
 
+- (NSDictionary *)JSONDictionary
+{
+    NSMutableDictionary *deviceKeys = [[NSMutableDictionary alloc] init];
+    for (NSString *userId in self.deviceKeys.userIds) {
+        NSMutableDictionary *devices = [[NSMutableDictionary alloc] init];
+        for (NSString *deviceId in [self.deviceKeys deviceIdsForUser:userId]) {
+            devices[deviceId] = [self.deviceKeys objectForDevice:deviceId forUser:userId].JSONDictionary.copy;
+        }
+        deviceKeys[userId] = devices.copy;
+    }
+    
+    NSMutableDictionary *master = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *selfSigning = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *userSigning = [[NSMutableDictionary alloc] init];
+    for (NSString *userId in self.crossSigningKeys) {
+        master[userId] = self.crossSigningKeys[userId].masterKeys.JSONDictionary.copy;
+        selfSigning[userId] = self.crossSigningKeys[userId].selfSignedKeys.JSONDictionary.copy;
+        userSigning[userId] = self.crossSigningKeys[userId].userSignedKeys.JSONDictionary.copy;
+    }
+    
+    return @{
+        @"device_keys": deviceKeys.copy ?: @{},
+        @"failures": self.failures.copy ?: @{},
+        @"master_keys": master.copy ?: @{},
+        @"self_signing_keys": selfSigning.copy ?: @{},
+        @"user_signing_keys": userSigning.copy ?: @{}
+    };
+}
+
+@end
+
+@interface MXKeysQueryResponseRaw ()
+@end
+
+@implementation MXKeysQueryResponseRaw
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXKeysQueryResponseRaw *keysQueryResponse = [[MXKeysQueryResponseRaw alloc] init];
+    if (keysQueryResponse)
+    {
+
+        if ([JSONDictionary[@"device_keys"] isKindOfClass:NSDictionary.class])
+        {
+            keysQueryResponse.deviceKeys = JSONDictionary[@"device_keys"];
+        }
+
+        MXJSONModelSetDictionary(keysQueryResponse.failures, JSONDictionary[@"failures"]);
+
+        // Extract cross-signing keys
+        NSMutableDictionary *crossSigningKeys = [NSMutableDictionary dictionary];
+
+        // Gather all of them by type by user
+        NSDictionary<NSString*, NSDictionary<NSString*, MXCrossSigningKey*>*> *allKeys =
+        @{
+          MXCrossSigningKeyType.master: [self extractUserKeysFromJSON:JSONDictionary[@"master_keys"]] ?: @{},
+          MXCrossSigningKeyType.selfSigning: [self extractUserKeysFromJSON:JSONDictionary[@"self_signing_keys"]] ?: @{},
+          MXCrossSigningKeyType.userSigning: [self extractUserKeysFromJSON:JSONDictionary[@"user_signing_keys"]] ?: @{},
+          };
+
+        // Package them into a `userId -> MXCrossSigningInfo` dictionary
+        for (NSString *keyType in allKeys)
+        {
+            NSDictionary<NSString*, MXCrossSigningKey*> *keys = allKeys[keyType];
+            for (NSString *userId in keys)
+            {
+                MXCrossSigningInfo *crossSigningInfo = crossSigningKeys[userId];
+                if (!crossSigningInfo)
+                {
+                    crossSigningInfo = [[MXCrossSigningInfo alloc] initWithUserId:userId];
+                    crossSigningKeys[userId] = crossSigningInfo;
+                }
+
+                [crossSigningInfo addCrossSigningKey:keys[userId] type:keyType];
+            }
+        }
+
+        keysQueryResponse.crossSigningKeys = crossSigningKeys;
+    }
+
+    return keysQueryResponse;
+}
+
++ (NSDictionary<NSString*, MXCrossSigningKey*>*)extractUserKeysFromJSON:(NSDictionary *)keysJSONDictionary
+{
+    NSMutableDictionary<NSString*, MXCrossSigningKey*> *keys = [NSMutableDictionary dictionary];
+    for (NSString *userId in keysJSONDictionary)
+    {
+        MXCrossSigningKey *key;
+        MXJSONModelSetMXJSONModel(key, MXCrossSigningKey, keysJSONDictionary[userId]);
+        if (key)
+        {
+            keys[userId] = key;
+        }
+    }
+
+    if (!keys.count)
+    {
+        keys = nil;
+    }
+
+    return keys;
+}
+
+- (NSDictionary *)JSONDictionary
+{
+    
+    NSMutableDictionary *master = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *selfSigning = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *userSigning = [[NSMutableDictionary alloc] init];
+    for (NSString *userId in self.crossSigningKeys) {
+        master[userId] = self.crossSigningKeys[userId].masterKeys.JSONDictionary.copy;
+        selfSigning[userId] = self.crossSigningKeys[userId].selfSignedKeys.JSONDictionary.copy;
+        userSigning[userId] = self.crossSigningKeys[userId].userSignedKeys.JSONDictionary.copy;
+    }
+    
+    return @{
+        @"device_keys": self.deviceKeys.copy ?: @{},
+        @"failures": self.failures.copy ?: @{},
+        @"master_keys": master.copy ?: @{},
+        @"self_signing_keys": selfSigning.copy ?: @{},
+        @"user_signing_keys": userSigning.copy ?: @{}
+    };
+}
+
+@end
+@interface MXKeysClaimResponse ()
+
+/**
+ The original JSON used to create the response model
+ */
+@property (nonatomic, copy) NSDictionary *responseJSON;
 @end
 
 @implementation MXKeysClaimResponse
@@ -1143,6 +1357,8 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
     MXKeysClaimResponse *keysClaimResponse = [[MXKeysClaimResponse alloc] init];
     if (keysClaimResponse)
     {
+        keysClaimResponse.responseJSON = JSONDictionary;
+        
         NSMutableDictionary *map = [NSMutableDictionary dictionary];
 
         if ([JSONDictionary isKindOfClass:NSDictionary.class])
@@ -1174,48 +1390,14 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
     return keysClaimResponse;
 }
 
-@end
-
-#pragma mark - Device Management
-
-@implementation MXDevice
-
-+ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+- (NSDictionary *)JSONDictionary
 {
-    MXDevice *device = [[MXDevice alloc] init];
-    if (device)
+    NSMutableDictionary *dictionary = [self.responseJSON mutableCopy];
+    if (!dictionary[@"failures"])
     {
-        MXJSONModelSetString(device.deviceId, JSONDictionary[@"device_id"]);
-        MXJSONModelSetString(device.displayName, JSONDictionary[@"display_name"]);
-        MXJSONModelSetString(device.lastSeenIp, JSONDictionary[@"last_seen_ip"]);
-        MXJSONModelSetUInt64(device.lastSeenTs, JSONDictionary[@"last_seen_ts"]);
+        dictionary[@"failures"] = @{};
     }
-    
-    return device;
-}
-
-- (instancetype)initWithCoder:(NSCoder *)aDecoder
-{
-    self = [super init];
-    if (self)
-    {
-        _deviceId = [aDecoder decodeObjectForKey:@"device_id"];
-        _displayName = [aDecoder decodeObjectForKey:@"display_name"];
-        _lastSeenIp = [aDecoder decodeObjectForKey:@"last_seen_ip"];
-        _lastSeenTs = [((NSNumber*)[aDecoder decodeObjectForKey:@"last_seen_ts"]) unsignedLongLongValue];
-    }
-    return self;
-}
-
-- (void)encodeWithCoder:(NSCoder *)aCoder
-{
-    [aCoder encodeObject:_deviceId forKey:@"device_id"];
-    if (_displayName)
-    {
-        [aCoder encodeObject:_displayName forKey:@"display_name"];
-    }
-    [aCoder encodeObject:_lastSeenIp forKey:@"last_seen_ip"];
-    [aCoder encodeObject:@(_lastSeenTs) forKey:@"last_seen_ts"];
+    return dictionary.copy;
 }
 
 @end
@@ -2036,63 +2218,170 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
 
 @end
 
-#pragma mark - Dehydration
-
-@implementation MXDehydratedDevice
+@implementation MXRoomJoinRuleResponse
 
 + (id)modelFromJSON:(NSDictionary *)JSONDictionary
 {
-    MXDehydratedDevice *device = [[MXDehydratedDevice alloc] init];
-    if (device)
+    MXRoomJoinRuleResponse *response = [MXRoomJoinRuleResponse new];
+    
+    if (response)
     {
-        MXJSONModelSetString(device.deviceId, JSONDictionary[@"device_id"]);
-        NSDictionary *deviceData = nil;
-        MXJSONModelSetDictionary(deviceData, JSONDictionary[@"device_data"]);
-        MXJSONModelSetString(device.account, deviceData[@"account"]);
-        MXJSONModelSetString(device.algorithm, deviceData[@"algorithm"]);
-        MXJSONModelSetString(device.passphrase, deviceData[@"passphrase"]);
+        MXJSONModelSetString(response.joinRule, JSONDictionary[@"join_rule"]);
+        
+        NSArray <NSDictionary *> *allowedArray;
+        MXJSONModelSetArray(allowedArray, JSONDictionary[@"allow"])
+        response.allowedParentIds = [self buildAllowedParentIdsWith: allowedArray];
+    }
+
+    return response;
+}
+
++ (NSArray<NSString *> *)buildAllowedParentIdsWith:(NSArray<NSDictionary *> *)allowedArray
+{
+    NSMutableArray <NSString *> *allowedParentIds = [NSMutableArray new];
+    
+    for (NSDictionary *allowed in allowedArray)
+    {
+        NSString *type;
+        MXJSONModelSetString(type, allowed[@"type"]);
+        if ([type isEqualToString: kMXEventTypeStringRoomMembership])
+        {
+            NSString *roomId;
+            MXJSONModelSetString(roomId, allowed[@"room_id"]);
+            if (roomId)
+            {
+                [allowedParentIds addObject: roomId];
+            }
+        }
     }
     
-    return device;
-}
-
-- (instancetype)initWithCoder:(NSCoder *)aDecoder
-{
-    self = [super init];
-    if (self)
-    {
-        _deviceId = [aDecoder decodeObjectForKey:@"device_id"];
-        _account = [aDecoder decodeObjectForKey:@"account"];
-        _algorithm = [aDecoder decodeObjectForKey:@"algorithm"];
-        _passphrase = [aDecoder decodeObjectForKey:@"passphrase"];
-    }
-    return self;
-}
-
-- (void)encodeWithCoder:(NSCoder *)aCoder
-{
-    [aCoder encodeObject:_deviceId forKey:@"device_id"];
-    [aCoder encodeObject:_account forKey:@"account"];
-    [aCoder encodeObject:_algorithm forKey:@"algorithm"];
-    if (_passphrase)
-    {
-        [aCoder encodeObject:_passphrase forKey:@"passphrase"];
-    }
-}
-
-- (NSDictionary *)JSONDictionary
-{
-    NSMutableDictionary *dictionary = [[NSMutableDictionary alloc] initWithDictionary:@{
-        @"algorithm": self.algorithm,
-        @"account": self.account
-    }];
-    
-    if (self.passphrase)
-    {
-        dictionary[@"passphrase"] = self.passphrase;
-    }
-    return dictionary;
+    return allowedParentIds;
 }
 
 @end
 
+#pragma mark - Device Dehydration
+
+@implementation MXDehydratedDeviceCreationParameters : MXJSONModel
+
+- (NSDictionary *)JSONDictionary
+{
+    return [MXTools deserialiseJSONString:self.body];
+}
+
+@end
+
+@implementation MXDehydratedDeviceResponse
+
++ (instancetype)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXDehydratedDeviceResponse *dehydratedDevice = [[MXDehydratedDeviceResponse alloc] init];
+    MXJSONModelSetString(dehydratedDevice.deviceId, JSONDictionary[@"device_id"]);
+    MXJSONModelSetDictionary(dehydratedDevice.deviceData, JSONDictionary[@"device_data"]);
+    return dehydratedDevice;
+}
+
+@end
+
+@implementation MXDehydratedDeviceEventsResponse
+
++ (instancetype)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXDehydratedDeviceEventsResponse *dehydratedDevice = [[MXDehydratedDeviceEventsResponse alloc] init];
+    MXJSONModelSetArray(dehydratedDevice.events, JSONDictionary[@"events"]);
+    MXJSONModelSetString(dehydratedDevice.nextBatch, JSONDictionary[@"next_batch"]);
+    return dehydratedDevice;
+}
+
+@end
+
+#pragma mark - Homeserver Capabilities
+
+@implementation MXRoomVersionInfo
+
+@end
+
+@implementation MXRoomCapabilitySupport
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXRoomCapabilitySupport *roomCapability = [MXRoomCapabilitySupport new];
+    if (roomCapability)
+    {
+        MXJSONModelSetString(roomCapability.preferred, JSONDictionary[@"preferred"]);
+        MXJSONModelSetArray(roomCapability.support, JSONDictionary[@"support"])
+    }
+    
+    return roomCapability;
+}
+
+@end
+
+@implementation MXRoomVersionCapabilities
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXRoomVersionCapabilities *versionCapabilities = [MXRoomVersionCapabilities new];
+    if (versionCapabilities)
+    {
+        MXJSONModelSetString(versionCapabilities.defaultRoomVersion, JSONDictionary[@"default"])
+        
+        NSMutableArray<MXRoomVersionInfo *> *versionInfoList = [NSMutableArray<MXRoomVersionInfo *> new];
+        NSDictionary *availableVersions = nil;
+        MXJSONModelSetDictionary(availableVersions, JSONDictionary[@"available"]);
+        [availableVersions enumerateKeysAndObjectsUsingBlock:^(id version, id status, BOOL* stop) {
+            MXRoomVersionInfo *versionInfo = [MXRoomVersionInfo new];
+            MXJSONModelSetString(versionInfo.version, version)
+            MXJSONModelSetString(versionInfo.statusString, status)
+            [versionInfoList addObject:versionInfo];
+        }];
+        versionCapabilities.supportedVersions = versionInfoList;
+        
+        NSMutableDictionary<NSString *, MXRoomCapabilitySupport *> *roomCapabilities = [NSMutableDictionary<NSString *, MXRoomCapabilitySupport *> new];
+        NSDictionary *roomCapabilitiesData = nil;
+        MXJSONModelSetDictionary(roomCapabilitiesData, JSONDictionary[@"org.matrix.msc3244.room_capabilities"]);
+        [roomCapabilitiesData enumerateKeysAndObjectsUsingBlock:^(id name, id capabilityData, BOOL* stop) {
+            MXRoomCapabilitySupport *capability = nil;
+            MXJSONModelSetMXJSONModel(capability, MXRoomCapabilitySupport, capabilityData);
+            if (capability)
+            {
+                roomCapabilities[name] = capability;
+            }
+        }];
+        versionCapabilities.roomCapabilities = roomCapabilities;
+    }
+    
+    return versionCapabilities;
+}
+
+@end
+
+@implementation MXHomeserverCapabilities
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXHomeserverCapabilities *capabilities = [MXHomeserverCapabilities new];
+    NSDictionary *capabilitiesData = JSONDictionary[@"capabilities"];
+    if (capabilities)
+    {
+        // The spec says: If not present, the client should assume that password changes are possible via the API
+        capabilities.canChangePassword = YES;
+        NSDictionary *changePassword = nil;
+        MXJSONModelSetDictionary(changePassword, capabilitiesData[@"m.change_password"]);
+        if (changePassword)
+        {
+            MXJSONModelSetBoolean(capabilities.canChangePassword, changePassword[@"enabled"])
+        }
+
+        NSDictionary *roomVersionsData = nil;
+        MXJSONModelSetDictionary(roomVersionsData, capabilitiesData[@"m.room_versions"]);
+        if (roomVersionsData)
+        {
+            MXJSONModelSetMXJSONModel(capabilities.roomVersions, MXRoomVersionCapabilities, roomVersionsData)
+        }
+    }
+
+    return capabilities;
+}
+
+@end

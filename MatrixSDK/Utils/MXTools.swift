@@ -18,6 +18,8 @@ import Foundation
 
 public extension MXTools {
     
+    @objc static let kMXUrlMaxLength = 2028
+
     /// Readable session state
     /// - Parameter state: session state
     /// - Returns: textual representation for the session state in a human readable way
@@ -26,4 +28,49 @@ public extension MXTools {
         return state.description
     }
     
+    @objc
+    static func urlString(base: String, queryParameters: [String]) -> String {
+        var urlString = base
+        var hasQueryParameters = urlString.contains("?")
+        for parameter in queryParameters {
+            let parameterFormat = !hasQueryParameters ? "?\(parameter)" : "&\(parameter)"
+            
+            guard urlString.count + parameterFormat.count <= kMXUrlMaxLength else {
+                break
+            }
+            
+            hasQueryParameters = true
+            urlString.append(parameterFormat)
+        }
+        return urlString
+    }
+
+    @objc
+    /// Checks whether a given to-device event is supported or not.
+    /// - Parameter event: Event to be checked
+    /// - Returns: `true` if the event is supported, otherwise `false`
+    static func isSupportedToDeviceEvent(_ event: MXEvent) -> Bool {
+        if event.isEncrypted {
+            // only support OLM encrypted events
+            let algorithm = event.wireContent["algorithm"] as? String
+            guard algorithm == kMXCryptoOlmAlgorithm else {
+                MXLog.debug("[MXTools] isSupportedToDeviceEvent: not supported event encrypted with other than OLM algorithm: \(String(describing: algorithm))")
+                return false
+            }
+        } else {
+            // define unsupported plain event types
+            let unsupportedPlainEvents = Set([
+                MXEventType.roomKey.identifier,
+                MXEventType.roomForwardedKey.identifier,
+                MXEventType.secretSend.identifier
+            ])
+            // make sure that the event type is supported
+            if unsupportedPlainEvents.contains(event.type) {
+                MXLog.debug("[MXTools] isSupportedToDeviceEvent: not supported plain event with type: \(String(describing: event.type))")
+                return false
+            }
+        }
+
+        return true
+    }
 }

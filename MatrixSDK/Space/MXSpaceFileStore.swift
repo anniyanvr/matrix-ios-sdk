@@ -61,7 +61,7 @@ class MXSpaceFileStore: MXSpaceStore {
                 }
                 try FileManager.default.moveItem(at: fileUrl, to: backupUrl)
             } catch {
-                MXLog.error("[MXSpaceFileStore] store: storeSpaceGraphData failed to move graph to backup: \(error)")
+                MXLog.error("[MXSpaceFileStore] store: storeSpaceGraphData failed to move graph to backup", context: error)
             }
         }
         
@@ -78,18 +78,12 @@ class MXSpaceFileStore: MXSpaceStore {
         
         let fileUrl = storeUrl.appendingPathComponent(Constants.fileStoreGraphFile)
         
-        do {
-            guard let graph = try? NSKeyedUnarchiver.unarchiveObject(withFile: fileUrl.path) as? MXSpaceGraphData else {
-                MXLog.warning("[MXSpaceStore] loadSpaceGraphData: found no archived graph")
-                return nil
-            }
-            
-            return graph
-        } catch {
-            MXLog.warning("[MXSpaceStore] loadSpaceGraphData: failed with error: \(error)")
+        guard let graph = NSKeyedUnarchiver.unarchiveObject(withFile: fileUrl.path) as? MXSpaceGraphData else {
+            MXLog.warning("[MXSpaceStore] loadSpaceGraphData: found no archived graph")
+            return nil
         }
         
-        return nil
+        return graph
     }
 
     // MARK - Private
@@ -97,8 +91,8 @@ class MXSpaceFileStore: MXSpaceStore {
     private func setUpStoragePaths() {
         var _cacheUrl: URL?
         
-        if let applicationGroupIdentifier = MXSDKOptions.sharedInstance().applicationGroupIdentifier {
-            _cacheUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: applicationGroupIdentifier)
+        if let container = FileManager.default.applicationGroupContainerURL() {
+            _cacheUrl = container
         } else {
             let cacheDirList = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true)
             _cacheUrl = URL(fileURLWithPath: cacheDirList[0])
@@ -114,10 +108,10 @@ class MXSpaceFileStore: MXSpaceStore {
         var isDirectory: ObjCBool = false
         if !FileManager.default.fileExists(atPath: storeUrl.path, isDirectory: &isDirectory) {
             do {
-                try FileManager.default.createDirectory(at: storeUrl, withIntermediateDirectories: true, attributes: nil)
+                try FileManager.default.createDirectoryExcludedFromBackup(at: storeUrl)
                 self.storeUrl = storeUrl
             } catch {
-                MXLog.error("[MXSpaceStore] setUpStoragePaths was unable to create space storage folder: \(error)")
+                MXLog.error("[MXSpaceStore] setUpStoragePaths was unable to create space storage folder", context: error)
             }
         } else {
             self.storeUrl = storeUrl

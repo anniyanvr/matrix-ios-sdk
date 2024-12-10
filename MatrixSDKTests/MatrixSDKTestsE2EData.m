@@ -19,11 +19,11 @@
 #ifdef MX_CRYPTO
 
 #import "MXSession.h"
-#import "MXCrypto_Private.h"
 #import "MXMegolmExportEncryption.h"
-#import "MXDeviceListOperation.h"
 #import "MXFileStore.h"
 #import "MXNoStore.h"
+#import "MXTools.h"
+#import "MatrixSDKTestsSwiftHeader.h"
 
 @interface MatrixSDKTestsE2EData ()
 
@@ -61,12 +61,14 @@
                      readyToTest:(void (^)(MXSession *bobSession, MXSession *aliceSession, XCTestExpectation *expectation))readyToTest
 {
     [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = YES;
+    MXKeyProvider.sharedInstance.delegate = [[MXKeyProviderStub alloc] init];
 
     [matrixSDKTestsData doMXSessionTestWithBob:testCase readyToTest:^(MXSession *bobSession, XCTestExpectation *expectation) {
 
         [matrixSDKTestsData doMXSessionTestWithAlice:nil readyToTest:^(MXSession *aliceSession, XCTestExpectation *expectation2) {
 
             [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
+            MXKeyProvider.sharedInstance.delegate = nil;
 
             readyToTest(bobSession, aliceSession, expectation);
 
@@ -83,11 +85,13 @@
 - (void)doE2ETestWithAliceInARoom:(XCTestCase *)testCase andStore:(id<MXStore>)store readyToTest:(void (^)(MXSession *, NSString *, XCTestExpectation *))readyToTest
 {
     [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = YES;
+    MXKeyProvider.sharedInstance.delegate = [[MXKeyProviderStub alloc] init];
 
     [matrixSDKTestsData doMXSessionTestWithAlice:testCase andStore:store
                                      readyToTest:^(MXSession *aliceSession, XCTestExpectation *expectation) {
 
         [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
+        MXKeyProvider.sharedInstance.delegate = nil;
 
         [aliceSession createRoom:nil visibility:kMXRoomDirectoryVisibilityPrivate roomAlias:nil topic:nil success:^(MXRoom *room) {
 
@@ -106,95 +110,12 @@
     }];
 }
 
-- (void)doE2ETestWithAliceAndBobInARoom:(XCTestCase*)testCase
-                             cryptedBob:(BOOL)cryptedBob
-                    warnOnUnknowDevices:(BOOL)warnOnUnknowDevices
-                            readyToTest:(void (^)(MXSession *aliceSession, MXSession *bobSession, NSString *roomId, XCTestExpectation *expectation))readyToTest
-{
-    [self doE2ETestWithAliceAndBobInARoom:testCase cryptedBob:cryptedBob warnOnUnknowDevices:warnOnUnknowDevices aliceStore:[[MXNoStore alloc] init] bobStore:[[MXNoStore alloc] init] readyToTest:readyToTest];
-}
-
-- (void)doE2ETestWithAliceAndBobInARoom:(XCTestCase*)testCase
-                             cryptedBob:(BOOL)cryptedBob
-                    warnOnUnknowDevices:(BOOL)warnOnUnknowDevices
-                             aliceStore:(id<MXStore>)aliceStore
-                               bobStore:(id<MXStore>)bobStore
-                            readyToTest:(void (^)(MXSession *aliceSession, MXSession *bobSession, NSString *roomId, XCTestExpectation *expectation))readyToTest
-{
-    [self doE2ETestWithAliceInARoom:testCase andStore:aliceStore readyToTest:^(MXSession *aliceSession, NSString *roomId, XCTestExpectation *expectation) {
-
-        MXRoom *room = [aliceSession roomWithRoomId:roomId];
-
-        [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = cryptedBob;
-
-        [matrixSDKTestsData doMXSessionTestWithBob:nil andStore:bobStore readyToTest:^(MXSession *bobSession, XCTestExpectation *expectation2) {
-
-            [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
-
-            aliceSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-            bobSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-
-            // Listen to Bob MXSessionNewRoomNotification event
-            __block __weak id observer = [[NSNotificationCenter defaultCenter] addObserverForName:kMXSessionNewRoomNotification object:bobSession queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-
-                [[NSNotificationCenter defaultCenter] removeObserver:observer];
-
-                [bobSession joinRoom:note.userInfo[kMXSessionNotificationRoomIdKey] viaServers:nil success:^(MXRoom *room) {
-
-                    readyToTest(aliceSession, bobSession, room.roomId, expectation);
-
-                } failure:^(NSError *error) {
-                    [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot join a room - error: %@", error];
-                }];
-            }];
-
-            [room inviteUser:bobSession.myUser.userId success:nil failure:^(NSError *error) {
-                [[NSNotificationCenter defaultCenter] removeObserver:observer];
-                [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot invite Bob (%@) - error: %@", bobSession.myUser.userId, error];
-            }];
-
-        }];
-
-    }];
-}
-
 - (void)doE2ETestWithAliceByInvitingBobInARoom:(XCTestCase*)testCase
                              cryptedBob:(BOOL)cryptedBob
                     warnOnUnknowDevices:(BOOL)warnOnUnknowDevices
                             readyToTest:(void (^)(MXSession *aliceSession, MXSession *bobSession, NSString *roomId, XCTestExpectation *expectation))readyToTest
 {
     [self doE2ETestWithAliceByInvitingBobInARoom:testCase cryptedBob:cryptedBob warnOnUnknowDevices:warnOnUnknowDevices aliceStore:[[MXNoStore alloc] init] bobStore:[[MXNoStore alloc] init] readyToTest:readyToTest];
-}
-
-- (void)doE2ETestWithAliceByInvitingBobInARoom:(XCTestCase*)testCase
-                             cryptedBob:(BOOL)cryptedBob
-                    warnOnUnknowDevices:(BOOL)warnOnUnknowDevices
-                             aliceStore:(id<MXStore>)aliceStore
-                               bobStore:(id<MXStore>)bobStore
-                            readyToTest:(void (^)(MXSession *aliceSession, MXSession *bobSession, NSString *roomId, XCTestExpectation *expectation))readyToTest
-{
-    [self doE2ETestWithAliceInARoom:testCase andStore:aliceStore readyToTest:^(MXSession *aliceSession, NSString *roomId, XCTestExpectation *expectation) {
-        
-        MXRoom *room = [aliceSession roomWithRoomId:roomId];
-        
-        [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = cryptedBob;
-        
-        [matrixSDKTestsData doMXSessionTestWithBob:nil andStore:bobStore readyToTest:^(MXSession *bobSession, XCTestExpectation *expectation2) {
-            
-            [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
-            
-            aliceSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-            bobSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-            
-            [room inviteUser:bobSession.myUser.userId success:^{
-                readyToTest(aliceSession, bobSession, room.roomId, expectation);
-            } failure:^(NSError *error) {
-                [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot invite Bob (%@) - error: %@", bobSession.myUser.userId, error];
-            }];
-            
-        }];
-        
-    }];
 }
 
 - (void)doE2ETestWithAliceAndBobInARoomWithCryptedMessages:(XCTestCase*)testCase
@@ -208,7 +129,7 @@
 
         __block NSUInteger messagesCount = 0;
 
-        [roomFromBobPOV liveTimeline:^(MXEventTimeline *liveTimeline) {
+        [roomFromBobPOV liveTimeline:^(id<MXEventTimeline> liveTimeline) {
             [liveTimeline listenToEventsOfTypes:@[kMXEventTypeStringRoomMessage] onEvent:^(MXEvent *event, MXTimelineDirection direction, MXRoomState *roomState) {
                 if (++messagesCount == 5)
                 {
@@ -219,15 +140,15 @@
 
 
         // Send messages in expected order
-        [roomFromAlicePOV sendTextMessage:messagesFromAlice[0] success:^(NSString *eventId) {
+        [roomFromAlicePOV sendTextMessage:messagesFromAlice[0] threadId:nil success:^(NSString *eventId) {
 
-            [roomFromBobPOV sendTextMessage:messagesFromBob[0] success:^(NSString *eventId) {
+            [roomFromBobPOV sendTextMessage:messagesFromBob[0] threadId:nil success:^(NSString *eventId) {
 
-                [roomFromBobPOV sendTextMessage:messagesFromBob[1] success:^(NSString *eventId) {
+                [roomFromBobPOV sendTextMessage:messagesFromBob[1] threadId:nil success:^(NSString *eventId) {
 
-                    [roomFromBobPOV sendTextMessage:messagesFromBob[2] success:^(NSString *eventId) {
+                    [roomFromBobPOV sendTextMessage:messagesFromBob[2] threadId:nil success:^(NSString *eventId) {
 
-                        [roomFromAlicePOV sendTextMessage:messagesFromAlice[1] success:nil failure:nil];
+                        [roomFromAlicePOV sendTextMessage:messagesFromAlice[1] threadId:nil success:nil failure:nil];
 
                     } failure:nil];
 
@@ -242,58 +163,26 @@
     }];
 }
 
-- (void)doE2ETestWithAliceAndBobAndSamInARoom:(XCTestCase*)testCase
-                                   cryptedBob:(BOOL)cryptedBob
-                                   cryptedSam:(BOOL)cryptedSam
-                          warnOnUnknowDevices:(BOOL)warnOnUnknowDevices
-                                  readyToTest:(void (^)(MXSession *aliceSession, MXSession *bobSession, MXSession *samSession, NSString *roomId, XCTestExpectation *expectation))readyToTest
-{
-    [self doE2ETestWithAliceAndBobInARoom:testCase cryptedBob:cryptedBob warnOnUnknowDevices:warnOnUnknowDevices readyToTest:^(MXSession *aliceSession, MXSession *bobSession, NSString *roomId, XCTestExpectation *expectation) {
-
-
-        MXRoom *room = [aliceSession roomWithRoomId:roomId];
-
-        [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = cryptedSam;
-
-        // Ugly hack: Create a bob from another MatrixSDKTestsData instance and call him Sam...
-        MatrixSDKTestsData *matrixSDKTestsData2 = [[MatrixSDKTestsData alloc] init];
-        [matrixSDKTestsData2 doMXSessionTestWithBob:nil readyToTest:^(MXSession *samSession, XCTestExpectation *expectation2) {
-
-            [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
-
-            aliceSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-            bobSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-            samSession.crypto.warnOnUnknowDevices = warnOnUnknowDevices;
-
-            // Listen to Sam MXSessionNewRoomNotification event
-            __block __weak id observer = [[NSNotificationCenter defaultCenter] addObserverForName:kMXSessionNewRoomNotification object:samSession queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-
-                [[NSNotificationCenter defaultCenter] removeObserver:observer];
-
-                [samSession joinRoom:note.userInfo[kMXSessionNotificationRoomIdKey] viaServers:nil success:^(MXRoom *room) {
-
-                    readyToTest(aliceSession, bobSession, samSession, room.roomId, expectation);
-
-                } failure:^(NSError *error) {
-                    [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot join a room - error: %@", error];
-                }];
-            }];
-
-            [room inviteUser:samSession.myUser.userId success:nil failure:^(NSError *error) {
-                [[NSNotificationCenter defaultCenter] removeObserver:observer];
-                [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot invite Alice - error: %@", error];
-            }];
-
-        }];
-    }];
-}
-
 - (void)loginUserOnANewDevice:(XCTestCase*)testCase
                   credentials:(MXCredentials*)credentials
                  withPassword:(NSString*)password
                    onComplete:(void (^)(MXSession *newSession))onComplete
 {
+    [self loginUserOnANewDevice:testCase
+                    credentials:credentials
+                   withPassword:password
+                          store:[[MXNoStore alloc] init]
+                     onComplete:onComplete];
+}
+
+- (void)loginUserOnANewDevice:(XCTestCase*)testCase
+                  credentials:(MXCredentials*)credentials
+                 withPassword:(NSString*)password
+                        store:(id<MXStore>)store
+                   onComplete:(void (^)(MXSession *newSession))onComplete
+{
     [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = YES;
+    MXKeyProvider.sharedInstance.delegate = [[MXKeyProviderStub alloc] init];
     
     MXRestClient *mxRestClient = [[MXRestClient alloc] initWithHomeServer:credentials.homeServer
                                         andOnUnrecognizedCertificateBlock:nil];
@@ -301,19 +190,26 @@
     
     [mxRestClient loginWithLoginType:kMXLoginFlowTypePassword username:credentials.userId password:password success:^(MXCredentials *credentials2) {
         
-        MXRestClient *mxRestClient2 = [[MXRestClient alloc] initWithCredentials:credentials2 andOnUnrecognizedCertificateBlock:nil];
+        MXRestClient *mxRestClient2 = [[MXRestClient alloc] initWithCredentials:credentials2 andOnUnrecognizedCertificateBlock:nil andPersistentTokenDataHandler:nil andUnauthenticatedHandler:nil];
         [matrixSDKTestsData retain:mxRestClient2];
         
         MXSession *newSession = [[MXSession alloc] initWithMatrixRestClient:mxRestClient2];
         [matrixSDKTestsData retain:newSession];
         
-        [newSession start:^{
-            [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
-            
-            onComplete(newSession);
-            
+        MXWeakify(newSession);
+        [newSession setStore:store success:^{
+            MXStrongifyAndReturnIfNil(newSession);
+            [newSession start:^{
+                [MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession = NO;
+                MXKeyProvider.sharedInstance.delegate = nil;
+                
+                onComplete(newSession);
+                
+            } failure:^(NSError *error) {
+                [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot set up intial test conditions - error: %@", error];
+            }];
         } failure:^(NSError *error) {
-            [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot set up intial test conditions - error: %@", error];
+            [matrixSDKTestsData breakTestCase:testCase reason:@"Cannot set up store - error: %@", error];
         }];
         
     } failure:^(NSError *error) {
@@ -345,7 +241,7 @@
          [aliceSession1.crypto.crossSigning setupWithPassword:MXTESTS_ALICE_PWD success:^{
              [bobSession.crypto.crossSigning setupWithPassword:MXTESTS_BOB_PWD success:^{
                  
-                 [self loginUserOnANewDevice:self credentials:aliceSession1.matrixRestClient.credentials withPassword:MXTESTS_ALICE_PWD onComplete:^(MXSession *aliceSession2) {
+                 [self loginUserOnANewDevice:testCase credentials:aliceSession1.matrixRestClient.credentials withPassword:MXTESTS_ALICE_PWD onComplete:^(MXSession *aliceSession2) {
                      
                      NSString *aliceUserId = aliceSession1.matrixRestClient.credentials.userId;
                      NSString *bobUserId = bobSession.matrixRestClient.credentials.userId;
@@ -405,24 +301,6 @@
              [expectation fulfill];
          }];
      }];
-}
-
-
-#pragma mark - Tools
-
-- (void)outgoingRoomKeyRequestInSession:(MXSession*)session complete:(void (^)(MXOutgoingRoomKeyRequest*))complete
-{
-    dispatch_async(session.crypto.cryptoQueue, ^{
-        MXOutgoingRoomKeyRequest *outgoingRoomKeyRequest = [session.crypto.store outgoingRoomKeyRequestWithState:MXRoomKeyRequestStateUnsent];
-        if (!outgoingRoomKeyRequest)
-        {
-            outgoingRoomKeyRequest = [session.crypto.store outgoingRoomKeyRequestWithState:MXRoomKeyRequestStateSent];
-        }
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            complete(outgoingRoomKeyRequest);
-        });
-    });
 }
 
 

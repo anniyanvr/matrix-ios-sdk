@@ -22,6 +22,8 @@
 #import "MXEvent.h"
 #import "MXVirtualRoomInfo.h"
 
+MX_ASSUME_MISSING_NULLABILITY_BEGIN
+
 /**
  `MXRoomAccountData` represents private data that the user has defined for a room.
  */
@@ -49,6 +51,12 @@
 @property (nonatomic, readonly) MXVirtualRoomInfo *virtualRoomInfo;
 
 /**
+ Space as order as per [MSC3230](https://github.com/matrix-org/matrix-spec-proposals/pull/3230)
+ */
+@property (nonatomic, readonly, nullable) NSString *spaceOrder;
+
+
+/**
  Process an event that modifies room account data (like m.tag event).
 
  @param event an event
@@ -74,3 +82,5 @@
 - (NSArray<NSString *> *)getTaggedEventsIds:(NSString*)tag;
 
 @end
+
+MX_ASSUME_MISSING_NULLABILITY_END

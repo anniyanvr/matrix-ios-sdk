@@ -34,6 +34,11 @@ FOUNDATION_EXPORT NSString *const kMXContentUriScheme;
 FOUNDATION_EXPORT NSString *const kMXContentPrefixPath;
 
 /**
+ A constant representing the default prefix of the Matrix authenticated content repository path.
+ */
+FOUNDATION_EXPORT NSString *const kMXAuthenticatedContentPrefixPath;
+
+/**
  A constant representing the URI path for as-yet unspecified of the AntiVirus Client-Server HTTP API.
  */
 FOUNDATION_EXPORT NSString *const kMXAntivirusAPIPrefixPathUnstable;
@@ -154,6 +159,7 @@ FOUNDATION_EXPORT NSString *const kMXRoomJoinRuleInvite;
  */
 FOUNDATION_EXPORT NSString *const kMXRoomJoinRulePrivate;
 FOUNDATION_EXPORT NSString *const kMXRoomJoinRuleKnock;
+FOUNDATION_EXPORT NSString *const kMXRoomJoinRuleRestricted;
 
 /**
  Room presets
@@ -202,7 +208,7 @@ FOUNDATION_EXPORT NSString *const kMXRoomMessageFormatHTML;
 /**
  The direction of an event in the timeline.
  */
-typedef enum : NSUInteger
+typedef NS_ENUM(NSUInteger, MXTimelineDirection)
 {
     // Forwards when the event is added to the end of the timeline.
     // These events come from the /sync stream or from forwards pagination.
@@ -211,60 +217,9 @@ typedef enum : NSUInteger
     // Backwards when the event is added to the start of the timeline.
     // These events come from a back pagination.
     MXTimelineDirectionBackwards
-} MXTimelineDirection NS_REFINED_FOR_SWIFT;
+};
 
 /**
  The matrix.to base URL.
  */
 FOUNDATION_EXPORT NSString *const kMXMatrixDotToUrl;
-
-
-#pragma mark - Analytics
-
-/**
- Timing stats relative to app startup.
- */
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStartupCategory;
-
-// Duration of the initial /sync request
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStartupInititialSync;
-
-// Duration of the first /sync when resuming the app
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStartupIncrementalSync;
-
-// Time to preload data in the MXStore
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStartupStorePreload;
-
-// Time to mount all objects from the store (it includes kMXAnalyticsStartupStorePreload time)
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStartupMountData;
-
-// Duration of the the display of the app launch screen
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStartupLaunchScreen;
-
-// Metrics related to the initial sync request
-FOUNDATION_EXPORT NSString *const kMXAnalyticsInitialSyncCategory;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsInitialSyncRequest;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsInitialSyncParsing;
-
-/**
- Overall stats category.
- */
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStatsCategory;
-
-// The number of room the user is in
-FOUNDATION_EXPORT NSString *const kMXAnalyticsStatsRooms;
-
-//  VoIP
-
-/**
- Overall VoIP category.
- */
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipCategory;
-
-//  VoIP event names
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipNameCallError;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipNameCallHangup;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipNameCallEnded;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipNamePlaceCall;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipNamePlaceConferenceCall;
-FOUNDATION_EXPORT NSString *const kMXAnalyticsVoipNameReceiveCall;

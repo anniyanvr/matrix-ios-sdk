@@ -34,7 +34,6 @@ typedef NS_ENUM(NSUInteger, MXCallTransferType)
     MXCallTransferTypeLocal
 };
 
-
 #pragma mark - Build time options
 
 /**
@@ -49,7 +48,7 @@ typedef NS_ENUM(NSUInteger, MXCallTransferType)
 
 NS_ASSUME_NONNULL_BEGIN
 
-@protocol MXBackgroundModeHandler;
+@protocol MXBackgroundModeHandler, MXCryptoV2MigrationDelegate;
 
 /**
  SDK options that can be set at the launch time.
@@ -170,10 +169,60 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) MXCallTransferType callTransferType;
 
 /**
- The class of room list data manager. This class must be conformed to MXRoomListDataManager protocol.
- By default this class is MXStoreRoomListDataManager.
+ The class of room list data manager. This class must conform to MXRoomListDataManager protocol.
+ By default this class is MXCoreDataRoomListDataManager.
  */
 @property (nonatomic) Class roomListDataManagerClass;
+
+/**
+ For use in clients that use a custom base url for permalinks rather than matrix.to.
+ This baseURL is used to generate permalinks within the app (E.g. timeline message permalinks).
+ An Optional String, when nil matrix.to format/hostname is used instead.
+ */
+@property (nonatomic, nullable) NSString *clientPermalinkBaseUrl;
+
+/**
+ Use refresh tokens and expiring access tokens as the auth mechanism as opposed to long-lived access tokens.
+ 
+ @remark NO by default.
+ */
+@property (nonatomic, assign) BOOL authEnableRefreshTokens;
+
+/**
+ Enable threading module and thread-specific replies to events.
+
+ @remark NO by default.
+ */
+@property (nonatomic) BOOL enableThreads;
+
+/**
+ Enable sharing of session keys for an immediate historical context (e.g. last 10-20 messages)
+ when inviting a new user to a room with shared history.
+ 
+ @remark NO by default.
+ */
+@property (nonatomic) BOOL enableRoomSharedHistoryOnInvite;
+
+/**
+ The delegate for migrating account data from legacy crypto to rust-based Crypto SDK
+ 
+ By default, nil.
+ */
+@property (nonatomic, nullable, weak) id<MXCryptoV2MigrationDelegate> cryptoMigrationDelegate;
+
+/**
+ Enable symmetric room key backups
+ 
+ @remark NO by default
+ */
+@property (nonatomic) BOOL enableSymmetricBackup;
+
+/**
+ Enable new client information feature. (https://github.com/vector-im/element-meta/pull/656)
+
+ @remark NO by default
+ */
+@property (nonatomic) BOOL enableNewClientInformationFeature;
 
 @end
 

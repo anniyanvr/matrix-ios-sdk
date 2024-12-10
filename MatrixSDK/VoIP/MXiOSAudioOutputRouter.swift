@@ -18,7 +18,6 @@ import Foundation
 import AVFoundation
 
 /// Audio output router class
-@available(iOS 10.0, *)
 @objcMembers
 public class MXiOSAudioOutputRouter: NSObject {
     
@@ -93,7 +92,7 @@ public class MXiOSAudioOutputRouter: NSObject {
     }
     
     /// Attempt to override route type to given type.
-    /// - Parameter routeType: Desired route type. `external` is useless if no external device connected, then it would fallback to the default route type.
+    /// - Parameter route: Desired route. If `nil` passed, then it would fallback to the default route.
     public func changeCurrentRoute(to route: MXiOSAudioOutputRoute?) {
         if let route = route {
             updateRoute(to: route)
@@ -189,7 +188,7 @@ public class MXiOSAudioOutputRouter: NSObject {
             }
             currentRoute = route
         } catch {
-            MXLog.error("[MXiOSAudioOutputRouter] updateRoute: routing failed: \(error)")
+            MXLog.error("[MXiOSAudioOutputRouter] updateRoute: routing failed", context: error)
         }
     }
 
@@ -232,14 +231,7 @@ public class MXiOSAudioOutputRouter: NSObject {
 fileprivate extension AVAudioSession {
     
     var outputRoutes: [MXiOSAudioOutputRoute] {
-        let oldCategory = category
-        try? setCategory(.multiRoute)
-        
-        let result = currentRoute.outputs.map({ MXiOSAudioOutputRoute(withPort: $0) })
-        
-        try? setCategory(oldCategory)
-        
-        return result
+        return currentRoute.outputs.map({ MXiOSAudioOutputRoute(withPort: $0) })
     }
     
 }

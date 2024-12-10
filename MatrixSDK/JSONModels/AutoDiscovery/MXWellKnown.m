@@ -16,6 +16,15 @@
 
 #import "MXWellKnown.h"
 
+static NSString *const kMXHomeServerKey = @"m.homeserver";
+static NSString *const kMXIdentityServerKey = @"m.identity_server";
+static NSString *const kMXIntegrationsKey = @"m.integrations";
+
+static NSString *const kMXTileServerKey = @"m.tile_server";
+static NSString *const kMXTileServerMSC3488Key = @"org.matrix.msc3488.tile_server";
+
+static NSString *const kMXAuthenticationKey = @"org.matrix.msc2965.authentication";
+
 @interface MXWellKnown()
 {
     // The original dictionary to store extented data
@@ -31,14 +40,25 @@
     MXWellKnown *wellknown;
 
     MXWellKnownBaseConfig *homeServerBaseConfig;
-    MXJSONModelSetMXJSONModel(homeServerBaseConfig, MXWellKnownBaseConfig, JSONDictionary[@"m.homeserver"]);
+    MXJSONModelSetMXJSONModel(homeServerBaseConfig, MXWellKnownBaseConfig, JSONDictionary[kMXHomeServerKey]);
     if (homeServerBaseConfig)
     {
         wellknown = [MXWellKnown new];
         wellknown.homeServer = homeServerBaseConfig;
 
-        MXJSONModelSetMXJSONModel(wellknown.identityServer, MXWellKnownBaseConfig, JSONDictionary[@"m.identity_server"]);
-        MXJSONModelSetMXJSONModel(wellknown.integrations, MXWellknownIntegrations, JSONDictionary[@"m.integrations"]);
+        MXJSONModelSetMXJSONModel(wellknown.identityServer, MXWellKnownBaseConfig, JSONDictionary[kMXIdentityServerKey]);
+        MXJSONModelSetMXJSONModel(wellknown.integrations, MXWellknownIntegrations, JSONDictionary[kMXIntegrationsKey]);
+        MXJSONModelSetMXJSONModel(wellknown.authentication, MXWellKnownAuthentication, JSONDictionary[kMXAuthenticationKey])
+        
+        if (JSONDictionary[kMXTileServerKey])
+        {
+            MXJSONModelSetMXJSONModel(wellknown.tileServer, MXWellKnownTileServerConfig, JSONDictionary[kMXTileServerKey]);
+        }
+        else if (JSONDictionary[kMXTileServerMSC3488Key])
+        {
+            MXJSONModelSetMXJSONModel(wellknown.tileServer, MXWellKnownTileServerConfig, JSONDictionary[kMXTileServerMSC3488Key]);
+        }
+        
         wellknown->JSONDictionary = JSONDictionary;
     }
 
@@ -63,9 +83,11 @@
     self = [super init];
     if (self)
     {
-        _homeServer = [aDecoder decodeObjectForKey:@"m.homeserver"];
-        _identityServer = [aDecoder decodeObjectForKey:@"m.identity_server"];
-        _integrations = [aDecoder decodeObjectForKey:@"m.integrations"];
+        _homeServer = [aDecoder decodeObjectForKey:kMXHomeServerKey];
+        _identityServer = [aDecoder decodeObjectForKey:kMXIdentityServerKey];
+        _integrations = [aDecoder decodeObjectForKey:kMXIntegrationsKey];
+        _tileServer = [aDecoder decodeObjectForKey:kMXTileServerKey];
+        _authentication = [aDecoder decodeObjectForKey:kMXAuthenticationKey];
         JSONDictionary = [aDecoder decodeObjectForKey:@"JSONDictionary"];
     }
     return self;
@@ -73,9 +95,11 @@
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
-    [aCoder encodeObject:_homeServer forKey:@"m.homeserver"];
-    [aCoder encodeObject:_identityServer forKey:@"m.identity_server"];
-    [aCoder encodeObject:_integrations forKey:@"m.integrations"];
+    [aCoder encodeObject:_homeServer forKey:kMXHomeServerKey];
+    [aCoder encodeObject:_identityServer forKey:kMXIdentityServerKey];
+    [aCoder encodeObject:_integrations forKey:kMXIntegrationsKey];
+    [aCoder encodeObject:_tileServer forKey:kMXTileServerKey];
+    [aCoder encodeObject:_authentication forKey:kMXAuthenticationKey];
     [aCoder encodeObject:JSONDictionary forKey:@"JSONDictionary"];
 }
 
